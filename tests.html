@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Engine — tests</title>
+<style>
+:root{ --bg:#f6f7f9; --panel:#fff; --ink:#12161c; --muted:#5c6773; --line:#dde2e8;
+  --pass:#1f7a3d; --fail:#b4341c; --mono:ui-monospace,Menlo,Consolas,monospace }
+@media (prefers-color-scheme:dark){ :root{ --bg:#11151a; --panel:#171c23; --ink:#e6ebf1; --muted:#93a0ad;
+  --line:#2b333d; --pass:#5ec27f; --fail:#e8836b } }
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+main{max-width:940px;margin:0 auto;padding:20px}
+h1{font-size:18px;margin:0 0 4px}
+#tally{font-family:var(--mono);font-size:16px;font-weight:700;margin:14px 0}
+.grp{background:var(--panel);border:1px solid var(--line);border-radius:6px;margin:10px 0;overflow:hidden}
+.grp h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  margin:0;padding:8px 12px;border-bottom:1px solid var(--line)}
+.t{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px;align-items:baseline}
+.t:last-child{border-bottom:0}
+.t b{font-family:var(--mono);font-size:12px;flex:none;width:44px}
+.t.p b{color:var(--pass)} .t.f b{color:var(--fail)}
+.t .why{color:var(--fail);font-family:var(--mono);font-size:12px;margin-left:auto;text-align:right}
+.muted{color:var(--muted)} code{font-family:var(--mono);font-size:12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Lead Assignment Engine — acceptance tests</h1>
+  <p class="muted">Runs the exact engine block out of <code>index.html</code> — no duplicated logic.
+     Must be served over http (open the deployed URL + <code>/tests.html</code>), because <code>file://</code> blocks the fetch.</p>
+  <div id="tally">running…</div>
+  <div id="out"></div>
+</main>
+
+<script>
+var groups = {}, pass = 0, fail = 0, cur = null;
+function group(n){ cur = n; groups[n] = groups[n] || []; }
+function ok(name, cond, why){
+  groups[cur].push({ name:name, cond:!!cond, why: cond ? '' : (why||'') });
+  if(cond) pass++; else fail++;
+}
+function eq(name, got, want){
+  var g = JSON.stringify(got), w = JSON.stringify(want);
+  ok(name, g === w, 'got ' + g + ', want ' + w);
+}
+function render(){
+  var out = document.getElementById('out'); out.innerHTML = '';
+  Object.keys(groups).forEach(function(g){
+    var d = document.createElement('div'); d.className = 'grp';
+    var h = document.createElement('h2'); h.textContent = g; d.appendChild(h);
+    groups[g].forEach(function(t){
+      var r = document.createElement('div'); r.className = 't ' + (t.cond ? 'p' : 'f');
+      var b = document.createElement('b'); b.textContent = t.cond ? 'PASS' : 'FAIL';
+      var s = document.createElement('span'); s.textContent = t.name;
+      r.appendChild(b); r.appendChild(s);
+      if(!t.cond && t.why){ var w = document.createElement('span'); w.className = 'why'; w.textContent = t.why; r.appendChild(w); }
+      d.appendChild(r);
+    });
+    out.appendChild(d);
+  });
+  var t = document.getElementById('tally');
+  t.textContent = pass + ' passing, ' + fail + ' failing';
+  t.style.color = fail ? 'var(--fail)' : 'var(--pass)';
+}
+
+// Cache-bust the fetch so the tests always run against the CURRENT engine, not a
+// stale copy the browser/CDN cached. Without this, a freshly-updated tests.html can
+// silently test an old index.html and throw confusing errors.
+fetch('index.html?nocache=' + Date.now(), { cache:'no-store' }).then(function(r){ return r.text(); }).then(function(html){
+  var doc = new DOMParser().parseFromString(html, 'text/html');
+  var engEl = doc.getElementById('engine');
+  if(!engEl) throw new Error('index.html has no <script id="engine"> block — is it the current version?');
+  (new Function(engEl.textContent))();     // defines window.ENGINE
+  if(!window.ENGINE || !window.ENGINE.MARKETS)
+    throw new Error('loaded an OLD index.html (no markets). Hard-refresh this page (Ctrl+Shift+R).');
+  runAll(window.ENGINE);
+  render();
+}).catch(function(e){
+  document.getElementById('tally').textContent = 'could not load engine: ' + e.message;
+  document.getElementById('tally').style.color = 'var(--fail)';
+});
+
+// ============================ fixtures ============================
+function mkRank(over){
+  var base = { team:'Beta' };
+  ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ base[p] = { leads:20, nsli:8000, close:30 }; });
+  base._tot = { leads:100, nsli:8000, close:30 };
+  return Object.assign(base, over||{});
+}
+// rep(name, 'bowie|md', {...}) — home now needs city|state to match production.
+function rep(name, home, rankOver){
+  if(home && home.indexOf('|') < 0) home = home + '|md';   // convenience default for older cases
+  return { name:name, home:home, rank:mkRank(rankOver) };
+}
+function mkLead(o){
+  return Object.assign({
+    _row: 2, 'Transaction ID':'T1', 'Customer Name':'Cust', 'City':'Bowie', 'State':'MD',
+    'Market':'DC Metro', 'Product':'WINDOWS', 'Campaign':'Retail', 'Start Time':'9:00',
+    'Notes':'', 'Service Provider':'', 'Set Type Description':'Set', 'Start Date/Time':'2026-07-17 09:00',
+    'Created On':'2026-07-10', 'Status':'Booked'
+  }, o);
+}
+// mkInput builds a full run() input. reps go on the field roster by default; pass
+// { bathReps: [...] } in `extra` to add Kappa reps (also included in rank/d60/homes).
+function mkInput(leads, reps, extra){
+  var rank = {}, d60 = {}, homes = {};
+  reps.forEach(function(r){
+    rank[r.name] = r.rank; homes[r.name] = r.home;
+    d60[r.name] = { nsli:9000, close:32, issued:40, vol:360000 };
+  });
+  var extras = extra || {};
+  (extras.bathReps || []).forEach(function(r){
+    rank[r.name] = r.rank; homes[r.name] = r.home;
+    d60[r.name] = { nsli:9000, close:32, issued:40, vol:360000 };
+  });
+  leads.forEach(function(l, i){ l._row = i + 2; });
+  var input = Object.assign({
+    market:'DC Metro', slot:'AM', leads:leads,
+    fieldRoster: reps.map(function(r){ return r.name; }),
+    bathRoster: (extras.bathReps || []).map(function(r){ return r.name; }),
+    rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+    geo:null, aliases:null, prodMap:null, manualPins:{}
+  }, extras);
+  delete input.bathReps;
+  return input;
+}
+
+// ============================ tests ============================
+function runAll(E){
+
+  // ---------- 1. notes parsing ----------
+  group('Notes parsing — windows');
+  eq('"6-8 windows" takes the max', E.parseWindows('6-8 windows').count, 8);
+  eq('"6 to 8 windows"', E.parseWindows('customer wants 6 to 8 windows').count, 8);
+  eq('"6 windows"', E.parseWindows('6 windows').count, 6);
+  eq('"6 vinyl windows" (1 filler word)', E.parseWindows('6 vinyl windows').count, 6);
+  eq('"6 white vinyl windows" (2 filler words)', E.parseWindows('6 white vinyl windows').count, 6);
+  // 3+ filler words is beyond the pattern by design — matches lead_engine.py.
+  // The product-code fallback is what rescues it on a real WINDOWS lead.
+  eq('3 filler words falls outside the pattern', E.parseWindows('6 vinyl double hung windows').count, 0);
+  eq('…but the WIN product fallback recovers the count',
+     E.describeLead(mkLead({ Product:'WINDOWS', Notes:'6 vinyl double hung windows' }), null).w, 6);
+  eq('WIN fallback also handles a bare range', E.describeLead(mkLead({ Product:'WINDOWS', Notes:'quote 6-8 of them' }), null).w, 8);
+  eq('"6 win" shorthand', E.parseWindows('6 win').count, 6);
+  eq('word numbers', E.parseWindows('eight windows').count, 8);
+  eq('"bow window and 3 additional" = 4', E.parseWindows('bow window and 3 additional windows').count, 4);
+  eq('bow window, no "additional" → max not sum', E.parseWindows('bow window, 3 windows').count, 3);
+  eq('clamp: 99 windows rejected', E.parseWindows('99 windows').count, 0);
+  eq('no number → 0', E.parseWindows('wants windows quoted').count, 0);
+  ok('no number → known=false', E.parseWindows('wants windows quoted').known === false);
+
+  group('Notes parsing — doors');
+  eq('"2storms" ungluing → 2', E.parseDoors('2storms').count, 2);
+  eq('"2 storm doors"', E.parseDoors('2 storm doors').count, 2);
+  eq('bare "door" does NOT count as 1', E.parseDoors('talk about a door').count, 0);
+  eq('typed mention with no number defaults to 1', E.parseDoors('needs a storm door').count, 1);
+  eq('front + storm sum across types', E.parseDoors('1 fed and 2 storms').count, 3);
+  eq('"N ed" front pattern', E.parseDoors('2 ed').count, 2);
+  eq('sgd', E.parseDoors('1 sgd').count, 1);
+  eq('generic vs typed → max', E.parseDoors('3 doors: 1 storm').count, 3);
+  eq('front type tracked', E.parseDoors('front entry door').types, ['front']);
+  eq('sliding type tracked', E.parseDoors('sliding glass door').types, ['sliding']);
+
+  group('Notes parsing — product tags (word boundaries)');
+  var pf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'customer will bring proof of ownership' }), null);
+  ok('"proof of ownership" is NOT a roof lead', pf.roof === false, 'roof=' + pf.roof);
+  var rf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'also wants roof quoted' }), null);
+  ok('"roof quoted" IS a roof lead', rf.roof === true);
+  var sf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'siding on the back' }), null);
+  ok('"siding" tag detected from notes', sf.sid === true);
+  var pc = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'8 windows. pre-cust: 20 windows in 2019' }), null);
+  eq('notes cut at "pre-cust"', pc.w, 8);
+
+  group('Opportunity string');
+  eq('8W 1D 1 siding', E.opportunity({ w:8, d:1, sid:true, roof:false, gut:false }), '8W 1D 1 siding');
+  eq('nothing parsed → em-dash', E.opportunity({ w:0, d:0, sid:false, roof:false, gut:false }), '—');
+
+  // ---------- 2. tiers ----------
+  group('Opportunity tiers');
+  eq('any siding → BIG', E.tierOf('SIDING', 0, false, 0, []), 'BIG');
+  eq('siding inside combo → BIG', E.tierOf('COMBO_SIDING_GUTT', 0, false, 0, []), 'BIG');
+  eq('3+ component combo → BIG', E.tierOf('COMBO_WIN_DOR_ROOF', 0, false, 0, []), 'BIG');
+  eq('7 windows → BIG', E.tierOf('WINDOWS', 7, true, 0, []), 'BIG');
+  eq('3 doors → BIG', E.tierOf('DOORS', 0, false, 3, ['storm']), 'BIG');
+  eq('5 windows + 2 doors → BIG', E.tierOf('COMBO_WIND_DOOR', 5, true, 2, ['storm']), 'BIG');
+  eq('roofing alone → MEDIUM', E.tierOf('ROOFING', 0, false, 0, []), 'MEDIUM');
+  eq('gutter in 2-part combo → MEDIUM', E.tierOf('COMBO_GUT_ROOFING', 0, false, 0, []), 'MEDIUM');
+  eq('exactly 6 windows → MEDIUM', E.tierOf('WINDOWS', 6, true, 0, []), 'MEDIUM');
+  eq('2 doors → MEDIUM', E.tierOf('DOORS', 0, false, 2, ['storm']), 'MEDIUM');
+  eq('1 front-entry door → MEDIUM', E.tierOf('DOORS', 0, false, 1, ['front']), 'MEDIUM');
+  eq('window-combo floor → MEDIUM not SMALL', E.tierOf('COMBO_WIND_GUTTER', 1, true, 0, []), 'MEDIUM');
+  eq('5 standalone windows → SMALL', E.tierOf('WINDOWS', 5, true, 0, []), 'SMALL');
+  eq('single storm door → SMALL', E.tierOf('DOORS', 0, false, 1, ['storm']), 'SMALL');
+
+  // ---------- 3. Hungarian ----------
+  group('Hungarian / assignment solver');
+  (function(){
+    // square, known optimum: identity is worst, anti-diagonal is best
+    var m = [[1, 9], [9, 1]];
+    eq('square 2x2 maximize', E.hungarianMax(m), [1, 0]);
+
+    var m2 = [[4, 1, 3], [2, 0, 5], [3, 2, 2]];
+    var r2 = E.hungarianMin(m2);
+    var total = r2.reduce(function(s, c, i){ return s + m2[i][c]; }, 0);
+    eq('classic 3x3 minimize hits known optimum 5', total, 5);
+    ok('3x3 assignment is a permutation', new Set(r2).size === 3);
+
+    // more leads than reps (rows > cols)
+    var m3 = [[10, 1], [5, 8], [1, 1]];
+    var r3 = E.hungarianMax(m3);
+    ok('more leads than reps: exactly 2 assigned', r3.filter(function(x){ return x >= 0; }).length === 2, JSON.stringify(r3));
+    ok('more leads than reps: picks 10 and 8', r3[0] === 0 && r3[1] === 1, JSON.stringify(r3));
+    ok('more leads than reps: no duplicate rep', new Set(r3.filter(function(x){ return x >= 0; })).size === 2);
+
+    // more reps than leads (cols > rows)
+    var m4 = [[1, 7, 3]];
+    var r4 = E.hungarianMax(m4);
+    eq('more reps than leads: picks the best column', r4, [1]);
+
+    // all-ineligible row
+    var S = -1e9;
+    var m5 = [[S, S], [4, 6]];
+    var r5 = E.hungarianMax(m5);
+    ok('all-ineligible row: still returns a permutation', r5[0] >= 0 && r5[1] >= 0);
+    ok('all-ineligible row: cell is sentinel, caller drops it', m5[0][r5[0]] <= -1e8);
+    ok('all-ineligible row: the live row keeps its best rep', m5[1][r5[1]] === 6 || m5[1][r5[1]] === 4);
+
+    // sentinel does not produce NaN
+    var m6 = [[S, 5], [5, S]];
+    var r6 = E.hungarianMax(m6);
+    ok('sentinel (not -Infinity) leaves no NaN', !isNaN(m6[0][r6[0]]) && !isNaN(m6[1][r6[1]]));
+
+    // determinism
+    var big = [];
+    for(var i = 0; i < 12; i++){ big[i] = []; for(var j = 0; j < 12; j++) big[i][j] = ((i*7 + j*13) % 11) * 100; }
+    eq('deterministic across runs', E.hungarianMax(big), E.hungarianMax(big));
+
+    // 1x1 and empty
+    eq('1x1', E.hungarianMax([[3]]), [0]);
+    eq('empty matrix', E.hungarianMax([]), []);
+  })();
+
+  // ---------- 4. skip rules ----------
+  group('Skip rules');
+  (function(){
+    var leads = [
+      mkLead({ 'Customer Name':'Keep Me' }),
+      mkLead({ 'Customer Name':'Cancelled', 'Service Provider':'James Dunn' }),
+      mkLead({ 'Customer Name':'Open One', 'Status':'Open' }),
+      mkLead({ 'Customer Name':'Installer', 'Campaign':'Install Consultant' }),
+      mkLead({ 'Customer Name':'Bath', 'Product':'BATHSYSTEM' }),
+      mkLead({ 'Customer Name':'Baltimore Mkt', 'Market':'Baltimore' })
+    ];
+    var reps = [rep('titus smith','bowie'), rep('stephen bryan','laurel')];
+    var r = E.run(mkInput(leads, reps));
+    eq('cancelled (James Dunn) counted', r.skips.cancelled, 1);
+    eq('open status counted', r.skips.open, 1);
+    eq('install consultant counted', r.skips.campaign, 1);
+    eq('bath now ROUTED not dropped (bath count still exposed)', r.skips.bath, 1);
+    ok('bath lead not on the field board', r.rows.every(function(x){ return String(x.lead['Product']).toUpperCase() !== 'BATHSYSTEM'; }));
+    ok('bath lead present on the bath board', r.bathRows.length === 1 && String(r.bathRows[0].lead['Product']).toUpperCase() === 'BATHSYSTEM');
+    eq('wrong market counted', r.skips.market, 1);
+    eq('4 rows dropped (not bath), 1 kept on field board', r.rows.length, 1);
+    eq('the kept row is the right one', r.rows[0].lead['Customer Name'], 'Keep Me');
+    ok('James Dunn read BEFORE the column is blanked', r.rows[0].lead['Customer Name'] !== 'Cancelled');
+    eq('skipped count in summary (excludes bath which is routed)', r.counts.skipped, 4);
+    ok('case-insensitive: "james dunn" lowercase also skipped',
+      E.classifySkip(mkLead({ 'Service Provider':'  james dunn ' }), 'DC Metro') === 'cancelled');
+    ok('case-insensitive: status "OPEN" skipped',
+      E.classifySkip(mkLead({ 'Status':'OPEN' }), 'DC Metro') === 'open');
+  })();
+
+  // ---------- 5. note pins ----------
+  group('Note-pin rule');
+  (function(){
+    var avail = ['franklin hill', 'stephen bryan', 'titus smith'];
+    eq('"Frank hill to run lead." → franklin hill',
+       E.findNotePins('Frank hill to run lead.'.toLowerCase(), avail), 'franklin hill');
+    eq('"Send Stephen Bryan"', E.findNotePins('send stephen bryan', avail), 'stephen bryan');
+    eq('"give it to titus"', E.findNotePins('give it to titus', avail), 'titus smith');
+    eq('no pin in ordinary notes', E.findNotePins('6 windows, dog on site', avail), null);
+    eq('ambiguous first name → no pin', E.findNotePins('send james', ['james archy','james dunn']), null);
+    eq('unknown name → no pin', E.findNotePins('send batman', avail), null);
+
+    var leads = [
+      mkLead({ 'Customer Name':'Pinned One', 'Notes':'Frank hill to run lead.', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Normal', 'Notes':'6 windows', 'City':'Bowie' })
+    ];
+    // frank is a weaker rep — without the pin the optimizer would not choose him for the pinned lead
+    var reps = [rep('franklin hill','bowie', { Windows:{ leads:20, nsli:2000, close:10 } }), rep('titus smith','bowie')];
+    var r = E.run(mkInput(leads, reps));
+    var pinned = r.rows.filter(function(x){ return x.pinned; });
+    eq('exactly one pinned row', pinned.length, 1);
+    eq('pinned to Franklin Hill', pinned[0].rep.c, 'franklin hill');
+    ok('pinned flag on the row', /PINNED per note/.test(pinned[0].flags[0]));
+    var other = r.rows.filter(function(x){ return !x.pinned; })[0];
+    eq('everyone else optimized around him', other.rep.c, 'titus smith');
+    eq('counts.pinned', r.counts.pinned, 1);
+  })();
+
+  group('Manual pin (UI dropdown)');
+  (function(){
+    var leads = [ mkLead({ 'Customer Name':'A', 'City':'Bowie' }), mkLead({ 'Customer Name':'B', 'City':'Bowie' }) ];
+    var reps = [rep('titus smith','bowie'), rep('stephen bryan','bowie')];
+    var r = E.run(mkInput(leads, reps, { manualPins: { 0:'stephen bryan' } }));
+    var row0 = r.rows.filter(function(x){ return x.lead['Customer Name'] === 'A'; })[0];
+    eq('manual pin honored', row0.rep.c, 'stephen bryan');
+    ok('manual pin flagged as by hand', /PINNED by hand/.test(row0.flags[0]));
+    var row1 = r.rows.filter(function(x){ return x.lead['Customer Name'] === 'B'; })[0];
+    eq('pinned rep pulled out of the pool', row1.rep.c, 'titus smith');
+  })();
+
+  // ---------- 6. drive + chaining ----------
+  group('Drive estimate');
+  (function(){
+    var g = E.DEFAULT_GEO;
+    var d = E.driveMinutes('bowie', 'bowie', g);
+    eq('same city → 0 minutes', Math.round(d), 0);
+    var wb = E.driveMinutes('washington', 'baltimore', g);
+    ok('DC→Baltimore lands in a sane band (60-90 min)', wb > 60 && wb < 90, String(Math.round(wb)));
+    eq('unknown city → null', E.driveMinutes('atlantis', 'bowie', g), null);
+    var far = E.haversine([38.9072,-77.0369], [39.2904,-76.6122]);
+    ok('haversine DC→Baltimore ≈ 35 miles', Math.abs(far - 35) < 3, String(far.toFixed(1)));
+  })();
+
+  group('Drive origin chaining');
+  (function(){
+    var leads = [ mkLead({ 'Customer Name':'X', 'City':'Rockville' }) ];
+    var reps = [rep('titus smith','bowie')];
+
+    var am = E.run(mkInput(leads, reps));
+    eq('AM starts from home', am.rows[0].origin, 'Bowie');
+
+    var pm = E.run(mkInput(leads, reps, { slot:'PM', origins:{ 'titus smith':'frederick' } }));
+    eq('PM starts from the prior board city', pm.rows[0].origin, 'Frederick');
+    ok('PM drive differs from AM drive', pm.rows[0].drive !== am.rows[0].drive,
+       'am=' + am.rows[0].drive + ' pm=' + pm.rows[0].drive);
+    ok('origin appears in the flags so a big number is explainable',
+       pm.rows[0].flags.some(function(f){ return f === 'from: Frederick'; }));
+
+    var eve = E.run(mkInput(leads, reps, { slot:'EVE', origins:{ 'titus smith':'olney' } }));
+    eq('EVE uses the most recent prior board (PM wins)', eve.rows[0].origin, 'Olney');
+
+    var noOrigin = E.run(mkInput(leads, reps, { slot:'PM', origins:{} }));
+    eq('rep absent from prior board falls back to home', noOrigin.rows[0].origin, 'Bowie');
+  })();
+
+  // ---------- 7. eligibility ----------
+  group('Eligibility rules');
+  (function(){
+    // BIG floor: rep is reachable but far below $5,000 eff NSLI
+    var weak = rep('titus smith','bowie');
+    ['Windows','Doors','Siding','Gutters','Roofing'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
+    var leads = [ mkLead({ 'Customer Name':'Big One', 'Product':'SIDING', 'City':'Bowie' }) ];
+    var inp = mkInput(leads, [weak]);
+    inp.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
+    inp.global60 = 500;
+    var r = E.run(inp);
+    eq('BIG lead below the floor is left unfilled', r.rows[0].rep, null);
+    ok('flagged as below the BIG floor', /below \$5,000 BIG floor/.test(r.rows[0].flags[0]), r.rows[0].flags[0]);
+
+    // drive ceiling
+    var far = [ mkLead({ 'Customer Name':'Far', 'City':'Winchester' }) ];
+    var r2 = E.run(mkInput(far, [rep('titus smith','chester')]));   // Chester VA → Winchester is way over 120m
+    eq('lead beyond the 120-minute ceiling is unfilled', r2.rows[0].rep, null);
+    ok('flagged as nobody within 120m', /no rep within 120m/.test(r2.rows[0].flags[0]), r2.rows[0].flags[0]);
+
+    // unknown city
+    var unk = [ mkLead({ 'Customer Name':'Nowhere', 'City':'Shangri-La' }) ];
+    var r3 = E.run(mkInput(unk, [rep('titus smith','bowie')]));
+    eq('unknown city → unfilled', r3.rows[0].rep, null);
+    ok('unknown city surfaced for the UI form', r3.missingGeo.indexOf('shangri-la') >= 0, JSON.stringify(r3.missingGeo));
+  })();
+
+  // ---------- 8. tier ordering ----------
+  group('Tier ordering — BIG claims the best rep first');
+  (function(){
+    var leads = [
+      mkLead({ 'Customer Name':'Small Lead', 'Product':'WINDOWS', 'Notes':'3 windows', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Big Lead', 'Product':'SIDING', 'City':'Bowie' })
+    ];
+    var strong = rep('titus smith','bowie');
+    strong.rank.Siding = { leads:30, nsli:20000, close:45 };
+    strong.rank.Windows = { leads:30, nsli:20000, close:45 };
+    var weak = rep('stephen bryan','bowie');
+    weak.rank.Siding = { leads:30, nsli:7000, close:20 };
+    weak.rank.Windows = { leads:30, nsli:7000, close:20 };
+    var inp = mkInput(leads, [strong, weak]);
+    inp.d60['titus smith'] = { nsli:20000, close:45, issued:40, vol:800000 };
+    inp.d60['stephen bryan'] = { nsli:7000, close:20, issued:40, vol:280000 };
+    var r = E.run(inp);
+    var big = r.rows.filter(function(x){ return x.tier === 'BIG'; })[0];
+    var small = r.rows.filter(function(x){ return x.tier === 'SMALL'; })[0];
+    eq('BIG lead got the stronger rep', big.rep.c, 'titus smith');
+    eq('SMALL lead got the other one', small.rep.c, 'stephen bryan');
+  })();
+
+  // ---------- 9. excluded reps ----------
+  group('Always-excluded reps');
+  (function(){
+    var leads = [ mkLead({ 'City':'Bowie' }) ];
+    var reps = [rep('gary halford','bowie'), rep('titus smith','bowie')];
+    var r = E.run(mkInput(leads, reps));
+    eq('excluded rep never assigned', r.rows[0].rep.c, 'titus smith');
+    ok('excluded rep not on the bench either', r.bench.every(function(b){ return b.c !== 'gary halford'; }));
+    E.BOTTOM_EXCLUDE.forEach(function(n){
+      ok('excluded: ' + n, E.BOTTOM_EXCLUDE.indexOf(n) >= 0);
+    });
+  })();
+
+  // ---------- 10. flags ----------
+  group('Assignment flags');
+  (function(){
+    // Bowie → Frederick is ~109 min: over the 75-min warn line, under the 120-min ceiling.
+    var leads = [ mkLead({ 'Customer Name':'Far One', 'City':'Frederick' }) ];
+    var r = E.run(mkInput(leads, [rep('titus smith','bowie')]));
+    ok('the long-drive fixture is actually assignable', r.rows[0].rep !== null, JSON.stringify(r.rows[0].flags));
+    ok('…and is genuinely a long drive (75 < d <= 120)', r.rows[0].drive > 75 && r.rows[0].drive <= 120, String(r.rows[0].drive));
+    ok('long drive gets "verify drive" flag',
+      r.rows[0].flags.some(function(f){ return /^verify drive ~\d+m$/.test(f); }), JSON.stringify(r.rows[0].flags));
+    ok('long drive row is highlighted warn', r.rows[0].state === 'warn');
+    ok('60-day volume in the flags', r.rows[0].flags.some(function(f){ return /60-day vol \$\d+K/.test(f); }));
+    ok('origin in the flags', r.rows[0].flags[0] === 'from: Bowie');
+
+    // thin 2-week data
+    var thin = rep('stephen bryan','bowie');
+    ['Windows','Doors','Siding','Gutters','Roofing'].forEach(function(p){ thin.rank[p] = { leads:2, nsli:9000, close:30 }; });
+    var r2 = E.run(mkInput([mkLead({ 'City':'Bowie' })], [thin]));
+    ok('thin 2-week product data flagged',
+      r2.rows[0].flags.some(function(f){ return /thin 2-wk product volume/.test(f); }), JSON.stringify(r2.rows[0].flags));
+
+    // BIG with limited 60-day issued
+    var rookie = rep('titus smith','bowie');
+    var inp = mkInput([mkLead({ 'Product':'SIDING', 'City':'Bowie' })], [rookie]);
+    inp.d60['titus smith'] = { nsli:9000, close:32, issued:4, vol:36000 };
+    var r3 = E.run(inp);
+    ok('BIG + few issued → verify flag',
+      r3.rows[0].flags.some(function(f){ return /limited 60-day volume \(4 issued\)/.test(f); }), JSON.stringify(r3.rows[0].flags));
+
+    // bath combo — Bath now scores (col 99 in v3.0.9), so combos INCLUDE it and the old
+    // "contains bath component — scored on windows/doors" flag has been retired.
+    var r4 = E.run(mkInput([mkLead({ 'Product':'COMBO_BATH_WIN_DOR', 'Notes':'6 windows 1 fed', 'City':'Bowie' })], [rep('titus smith','bowie')]));
+    ok('bath combo stays on the field board (not a pure BATHSYSTEM lead)', r4.rows.length === 1);
+    eq('bath combo now scored on Bath + Windows + Doors', r4.rows[0].detail.comps, ['Bath','Windows','Doors']);
+    ok('the old "scored on windows/doors" flag is gone',
+      r4.rows[0].flags.every(function(f){ return !/scored on windows\/doors/.test(f); }));
+
+    // unknown product
+    var r5 = E.run(mkInput([mkLead({ 'Product':'COMBO_NEW_THING', 'City':'Bowie' })], [rep('titus smith','bowie')]));
+    ok('unknown product flagged on the row',
+      r5.rows[0].flags.some(function(f){ return /unknown product code/.test(f); }), JSON.stringify(r5.rows[0].flags));
+    eq('unknown product surfaced for the UI', r5.unknownProducts, ['COMBO_NEW_THING']);
+    eq('unknown product defaults to Windows scoring', r5.rows[0].detail.comps, ['Windows']);
+
+    // duplicates
+    var dup = [ mkLead({ 'Customer Name':'Same Guy', 'City':'Bowie' }), mkLead({ 'Customer Name':'Same Guy', 'City':'Bowie' }) ];
+    var r6 = E.run(mkInput(dup, [rep('titus smith','bowie'), rep('stephen bryan','bowie')]));
+    ok('duplicate leads flagged on both rows',
+      r6.rows.filter(function(x){ return x.flags.some(function(f){ return /possible duplicate/.test(f); }); }).length === 2);
+
+    // reschedule
+    var r7 = E.run(mkInput([mkLead({ 'Notes':'needs to reschedule for friday', 'City':'Bowie' })], [rep('titus smith','bowie')]));
+    ok('reschedule note flagged', r7.rows[0].flags.some(function(f){ return /reschedule/.test(f); }));
+  })();
+
+  // ---------- 11. bench ----------
+  group('Bench');
+  (function(){
+    var leads = [ mkLead({ 'City':'Bowie' }) ];
+    var a = rep('titus smith','bowie'), b = rep('stephen bryan','laurel'), c = rep('dorothy cosby','olney');
+    var inp = mkInput(leads, [a, b, c]);
+    inp.d60['titus smith'] = { nsli:9000, close:32, issued:40, vol:100000 };
+    inp.d60['stephen bryan'] = { nsli:9000, close:32, issued:40, vol:900000 };
+    inp.d60['dorothy cosby'] = { nsli:9000, close:32, issued:40, vol:500000 };
+    var r = E.run(inp);
+    eq('one lead, three reps → two benched', r.bench.length, 2);
+    ok('bench sorted by 60-day volume descending', r.bench[0].vol >= r.bench[1].vol,
+       JSON.stringify(r.bench.map(function(x){ return x.vol; })));
+    ok('assigned rep is not on the bench', r.bench.every(function(x){ return x.c !== r.rows[0].rep.c; }));
+    ok('bench rows carry a home city', r.bench.every(function(x){ return !!x.origin; }));
+  })();
+
+  // ---------- 12. scoring ----------
+  group('Scoring math');
+  (function(){
+    var a = rep('titus smith','bowie');
+    var ctx = { rank:{ 'titus smith':a.rank }, d60:{ 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 } },
+      global60:9000, geo:E.DEFAULT_GEO, avail:[{ c:'titus smith', disp:'Titus Smith', home:'bowie', origin:'bowie' }] };
+    var S = E.makeScorer(ctx);
+    // rep_prior = (40*9000 + 8*9000)/(40+8) = 9000
+    // eff = (20*8000 + 12*9000)/(20+12) = (160000+108000)/32 = 8375
+    ok('eff() matches the documented formula', Math.abs(S.eff('titus smith','Windows') - 8375) < 0.5,
+       String(S.eff('titus smith','Windows')));
+    ok('base_val of a combo is the mean of components',
+       Math.abs(S.baseVal('titus smith', ['Windows','Doors']) - 8375) < 0.5);
+    eq('volnorm of the only rep is 1', S.volnorm('titus smith'), 1);
+    ok('tiebreak is small and positive', S.tiebreak('titus smith') > 0 && S.tiebreak('titus smith') < 1);
+
+    // K2 pulls a low-issued rep toward the global average
+    var ctx2 = Object.assign({}, ctx, { d60:{ 'titus smith':{ nsli:1000, close:32, issued:0, vol:0 } }, global60:9000 });
+    var S2 = E.makeScorer(ctx2);
+    // rep_prior = (0*1000 + 8*9000)/(0+8) = 9000 → fully shrunk to global
+    ok('K2 shrinks a zero-issued rep fully to the global average',
+       Math.abs(S2.eff('titus smith','Windows') - 8375) < 0.5, String(S2.eff('titus smith','Windows')));
+
+    eq('global60 = total net / total issued', E.global60Of({ a:{ vol:1000, issued:10 }, b:{ vol:3000, issued:10 } }), 200);
+
+    // volume is additive, not a multiplier: a high-volume rep beats a slightly better-fit low-volume rep
+    var hi = rep('stephen bryan','bowie'), lo = rep('titus smith','bowie');
+    hi.rank.Windows = { leads:30, nsli:8000, close:30 };
+    lo.rank.Windows = { leads:30, nsli:8600, close:30 };
+    var inp = mkInput([mkLead({ Notes:'3 windows', 'City':'Bowie' })], [hi, lo]);
+    inp.d60['stephen bryan'] = { nsli:8000, close:30, issued:60, vol:900000 };
+    inp.d60['titus smith'] = { nsli:8600, close:30, issued:20, vol:100000 };
+    var r = E.run(inp);
+    eq('VOL_ADD lets a high-volume rep win a soft-fit lead', r.rows[0].rep.c, 'stephen bryan');
+  })();
+
+  // ---------- 13. aliases + home overrides ----------
+  group('Aliases');
+  (function(){
+    eq('roster typo mapped', E.canon('titus smtih'), 'titus smith');
+    eq('roster typo mapped 2', E.canon('stepehn bryan'), 'stephen bryan');
+    eq('frank hill → franklin hill', E.canon('frank hill'), 'franklin hill');
+    eq('case + whitespace tolerated', E.canon('  Frank Hill  '), 'franklin hill');
+    eq('unknown name passes through lowercased', E.canon('New Person'), 'new person');
+    eq('custom alias wins', E.canon('bob', { bob:'robert smith' }), 'robert smith');
+
+    // roster with a typo'd name still lands on the right rep
+    var leads = [ mkLead({ 'City':'Bowie' }) ];
+    var reps = [rep('titus smith','bowie')];
+    var inp = mkInput(leads, reps);
+    inp.fieldRoster = ['titus smtih'];
+    var r = E.run(inp);
+    eq('typo in roster resolves via alias, rep not silently dropped', r.rows[0].rep.c, 'titus smith');
+    eq('no missing-data warning', r.missingData.length, 0);
+  })();
+
+  group('Roster data integrity');
+  (function(){
+    var leads = [ mkLead({ 'City':'Bowie' }) ];
+    var inp = mkInput(leads, [rep('titus smith','bowie')]);
+    inp.fieldRoster = ['titus smith', 'ghost person'];
+    var r = E.run(inp);
+    eq('rep with no ranking/home data is reported, not silent', r.missingData, ['ghost person']);
+    eq('and is left out of the pool', r.avail.length, 1);
+  })();
+
+  // =====================================================================
+  //                MARKETS + BATH  (spec section 9)
+  // =====================================================================
+
+  group('Team parsing → market membership');
+  (function(){
+    eq('team map buckets the five real teams correctly', E.TEAMS_BY_MARKET, {
+      'DC Metro': ['Beta','Delta'], 'Hampton Roads': ['Gamma-VAB'], 'Richmond': ['Gamma-RVA']
+    });
+    eq('bath crew name', E.BATH_TEAM, 'Kappa');
+    // A rep whose Team column is Gamma-VAB should not appear on a DC Metro field board
+    var titus = rep('titus smith','bowie|md');   titus.rank.team = 'Beta';
+    var neil  = rep('neil waranch','virginia beach|va'); neil.rank.team = 'Gamma-VAB';
+    var r = E.run(mkInput([mkLead({ 'City':'Bowie' })], [titus, neil]));
+    ok('DC run excludes a Gamma-VAB rep', r.fieldAvail.map(function(a){ return a.c; }).sort().join(',') === 'titus smith');
+    ok('the excluded rep is reported for the UI', r.wrongTeamField.some(function(w){ return w.rep === 'neil waranch'; }));
+  })();
+
+  group('Mechanicsville|va regression');
+  (function(){
+    var geo = E.DEFAULT_GEO;
+    var vaHit = E.geoLookup('mechanicsville', 'va', geo);
+    var mdHit = E.geoLookup('mechanicsville', 'md', geo);
+    eq('Mechanicsville, VA has its own entry (Hanover County)', vaHit.coord, [37.6087, -77.3733]);
+    eq('Mechanicsville, MD stays where it was (St. Marys)', mdHit.coord, [38.4438, -76.7383]);
+    ok('VA hit is exact, not a fallback', vaHit.fallback === false);
+    ok('MD hit is exact, not a fallback', mdHit.fallback === false);
+
+    // Drive: Richmond rep home -> Mechanicsville lead using each state.
+    var vaDrive = E.driveMinutes('richmond|va', 'mechanicsville|va', geo);
+    var mdDrive = E.driveMinutes('richmond|va', 'mechanicsville|md', geo);
+    ok('Richmond→Mechanicsville-VA is a short drive (~10-25 min)', vaDrive > 5 && vaDrive < 30, String(Math.round(vaDrive)));
+    ok('Richmond→Mechanicsville-MD is a long drive (>90 min)', mdDrive > 90, String(Math.round(mdDrive)));
+  })();
+
+  group('Geocode key format + state fallback');
+  (function(){
+    var geo = { 'foo|va': [37, -77] };
+    eq('exact city|state hit', E.geoLookup('foo', 'va', geo).coord, [37, -77]);
+    eq('wrong state falls back and flags it', E.geoLookup('foo', 'md', geo),
+      { coord:[37,-77], fallback:true, matchedState:'va' });
+    eq('unknown state falls back too', E.geoLookup('foo', '', geo),
+      { coord:[37,-77], fallback:true, matchedState:'va' });
+    eq('unknown city returns null', E.geoLookup('bar', 'va', geo), null);
+    eq('city alias applies before lookup', E.geoLookup('va beach', 'va', { 'virginia beach|va':[36,-75] }).coord, [36,-75]);
+  })();
+
+  group('State-fallback flag surfaces on the row');
+  (function(){
+    // Norfolk exists only under VA. A lead that mislabels it "MD" must fall back to VA
+    // AND get flagged — never silently pick the VA coordinates without saying so.
+    var eissens = rep('erin eissens', 'hampton|va'); eissens.rank.team = 'Gamma-VAB';
+    var lead = mkLead({ 'Customer Name':'Wrong State', 'City':'Norfolk', 'State':'MD', 'Market':'Hampton Roads' });
+    var r = E.run(mkInput([lead], [eissens], { market:'Hampton Roads' }));
+    ok('state-mismatch surfaced in the state-fallbacks list',
+      r.stateFallbacks.some(function(sf){ return sf.city === 'norfolk' && sf.requestedState === 'md' && sf.matchedState === 'va'; }),
+      JSON.stringify(r.stateFallbacks));
+    ok('and shows up as a row flag',
+      r.rows[0].flags.some(function(f){ return /city matched with wrong state/.test(f); }),
+      JSON.stringify(r.rows[0].flags));
+    ok('but the lead still gets assigned (fallback, not failure)', r.rows[0].rep !== null);
+  })();
+
+  group('Per-market exclusions');
+  (function(){
+    // Neil Waranch and Stephanie Poteet must be ASSIGNABLE on a Hampton Roads board.
+    var neil = rep('neil waranch','virginia beach|va'); neil.rank.team = 'Gamma-VAB';
+    var steph = rep('stephanie poteet','virginia beach|va'); steph.rank.team = 'Gamma-VAB';
+    var hrLead = mkLead({ 'Customer Name':'HR One', 'City':'Norfolk', 'State':'VA', 'Market':'Hampton Roads' });
+    var r = E.run(mkInput([hrLead], [neil, steph], { market:'Hampton Roads' }));
+    ok('Neil Waranch is in the HR field pool', r.fieldAvail.some(function(a){ return a.c === 'neil waranch'; }));
+    ok('Stephanie Poteet is in the HR field pool', r.fieldAvail.some(function(a){ return a.c === 'stephanie poteet'; }));
+
+    // Raymond Hieronimus must be ASSIGNABLE on a bath board.
+    var ray = rep('raymond hieronimus','washington|dc'); ray.rank.team = 'Kappa';
+    var bath = mkLead({ 'Product':'BATHSYSTEM', 'City':'Bowie', 'Market':'DC Metro' });
+    var r2 = E.run(mkInput([], [], { bathReps:[ray], leads:[bath], market:'DC Metro' }));
+    ok('Raymond Hieronimus is in the bath pool', r2.bathAvail.some(function(a){ return a.c === 'raymond hieronimus'; }));
+
+    // David Golladay and Gary Halford stay excluded from DC.
+    var davo = rep('david golladay','bowie|md'); davo.rank.team = 'Beta';
+    var gary = rep('gary halford','bowie|md'); gary.rank.team = 'Delta';
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var r3 = E.run(mkInput([mkLead({ 'City':'Bowie' })], [davo, gary, titus]));
+    ok('David Golladay still excluded from DC', !r3.fieldAvail.some(function(a){ return a.c === 'david golladay'; }));
+    ok('Gary Halford still excluded from DC', !r3.fieldAvail.some(function(a){ return a.c === 'gary halford'; }));
+    ok('Titus Smith still in DC pool', r3.fieldAvail.some(function(a){ return a.c === 'titus smith'; }));
+  })();
+
+  group('Bath routing');
+  (function(){
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var malcolm = rep('malcolm kerr','washington|dc'); malcolm.rank.team = 'Kappa';
+    malcolm.rank.Bath = { leads:25, nsli:8000, close:30 };
+    var leads = [
+      mkLead({ 'Customer Name':'Field One', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Bath One', 'Product':'BATHSYSTEM', 'City':'Bowie' })
+    ];
+    var r = E.run(mkInput(leads, [titus], { bathReps:[malcolm] }));
+    eq('one field board row', r.rows.length, 1);
+    eq('one bath board row', r.bathRows.length, 1);
+    eq('bath lead went to Kappa, not field', r.bathRows[0].rep.c, 'malcolm kerr');
+    ok('bath overflow was not used', r.overflowUsed === false);
+    eq('field board rep is Titus', r.rows[0].rep.c, 'titus smith');
+  })();
+
+  group('Kappa never on any field board');
+  (function(){
+    // Kappa rep is *checked* in the FIELD roster by mistake — engine must still refuse.
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var malcolm = rep('malcolm kerr','washington|dc'); malcolm.rank.team = 'Kappa';
+    var leads = [ mkLead({ 'Customer Name':'Field', 'City':'Bowie' }) ];
+    // Put both in fieldRoster; even though malcolm is checked as field, engine strips him.
+    var inp = mkInput(leads, [titus]);
+    inp.rank['malcolm kerr'] = malcolm.rank;
+    inp.homes['malcolm kerr'] = malcolm.home;
+    inp.d60['malcolm kerr'] = { nsli:8000, close:30, issued:20, vol:160000 };
+    inp.fieldRoster = ['titus smith','malcolm kerr'];
+    var r = E.run(inp);
+    ok('Kappa rep never appears in the field pool', !r.fieldAvail.some(function(a){ return a.c === 'malcolm kerr'; }));
+    ok('and the rejection is reported',
+      r.wrongTeamField.some(function(w){ return w.rep === 'malcolm kerr' && /Kappa/.test(w.reason); }));
+    // Even if the FIELD board has unfilled leads and the Kappa rep is idle:
+    var farLead = mkLead({ 'Customer Name':'Field', 'City':'Winchester', 'State':'VA' });
+    var r2 = E.run(Object.assign({}, inp, { leads:[farLead] }));
+    // Titus can't reach Winchester (>120min), so field is unfilled — Kappa still can't take it.
+    ok('unfilled field lead does NOT get picked up by an idle Kappa rep', r2.rows[0].rep === null);
+  })();
+
+  group('Bath overflow (field-first, then bath) — spec option B');
+  (function(){
+    // 3 bath leads, 1 Kappa, 3 field bench reps — expect 1 Kappa + 2 overflow.
+    var kappaRep = rep('malcolm kerr','washington|dc'); kappaRep.rank.team = 'Kappa'; kappaRep.rank.Bath = { leads:25, nsli:8000, close:30 };
+    var f1 = rep('titus smith','bowie|md'); f1.rank.team = 'Beta';
+    var f2 = rep('raymond wander','bowie|md');  f2.rank.team = 'Delta';
+    var f3 = rep('stephen bryan','bowie|md'); f3.rank.team = 'Delta';
+    var leads = [
+      mkLead({ 'Customer Name':'B1', 'Product':'BATHSYSTEM', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'B2', 'Product':'BATHSYSTEM', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'B3', 'Product':'BATHSYSTEM', 'City':'Bowie' })
+    ];
+    var r = E.run(mkInput(leads, [f1, f2, f3], { bathReps:[kappaRep] }));
+    eq('all three bath leads have a rep', r.bathRows.filter(function(x){ return x.rep; }).length, 3);
+    eq('one Kappa, two overflow', r.counts.bathAssigned + ':' + r.counts.bathOverflow, '1:2');
+    var overflowNames = r.bathRows.filter(function(x){ return x.overflow; }).map(function(x){ return x.rep.c; });
+    ok('overflow reps disappear from the field bench',
+      r.bench.every(function(b){ return overflowNames.indexOf(b.c) < 0; }),
+      'bench=' + r.bench.map(function(b){return b.c;}).join(',') + ' overflow=' + overflowNames.join(','));
+    ok('bath rows tagged as overflow with a clear flag',
+      r.bathRows.filter(function(x){ return x.overflow; }).every(function(x){ return x.flags.some(function(f){ return /OVERFLOW/.test(f); }); }));
+
+    // Bath leads ≤ Kappa reps → zero field reps pulled.
+    var r2 = E.run(mkInput([leads[0]], [f1, f2, f3], { bathReps:[kappaRep] }));
+    eq('with enough Kappa, no field rep gets overflow-pulled', r2.counts.bathOverflow, 0);
+    eq('all three field reps stay on the bench', r2.bench.length, 3);
+  })();
+
+  group('Overflow candidates ranked by bath score, not field score');
+  (function(){
+    // Two field bench reps — one is a great window rep but weak on bath,
+    // the other is soft on windows but strong on bath. Overflow must pick the bath-strong rep.
+    var windowStar = rep('titus smith','bowie|md');
+    windowStar.rank.team = 'Beta';
+    windowStar.rank.Windows = { leads:50, nsli:15000, close:45 };
+    windowStar.rank.Bath = { leads:2, nsli:2000, close:10 };
+    var bathStar = rep('raymond wander','bowie|md');
+    bathStar.rank.team = 'Delta';
+    bathStar.rank.Windows = { leads:20, nsli:5000, close:20 };
+    bathStar.rank.Bath = { leads:20, nsli:14000, close:40 };
+    var kappa = rep('malcolm kerr','washington|dc'); kappa.rank.team = 'Kappa';
+    kappa.rank.Bath = { leads:25, nsli:8000, close:30 };
+    // Two bath leads (kappa takes one, overflow takes one) + one small window lead
+    // so both field reps are on the bench pre-overflow. (Field only has 2 reps, 1 window lead
+    // = 1 rep assigned to field, 1 rep on bench for overflow.)
+    // To force both onto the bench so we can measure the pick, give no field leads.
+    var leads = [
+      mkLead({ 'Customer Name':'Bath1', 'Product':'BATHSYSTEM', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Bath2', 'Product':'BATHSYSTEM', 'City':'Bowie' })
+    ];
+    var inp = mkInput(leads, [windowStar, bathStar], { bathReps:[kappa] });
+    inp.d60['raymond wander'] = { nsli:14000, close:40, issued:30, vol:400000 };
+    inp.d60['titus smith'] = { nsli:15000, close:45, issued:30, vol:400000 };
+    var r = E.run(inp);
+    var overflowRow = r.bathRows.filter(function(x){ return x.overflow; })[0];
+    ok('overflow picked the bath-strong rep, not the window-strong one',
+       overflowRow && overflowRow.rep.c === 'raymond wander',
+       overflowRow ? overflowRow.rep.c : 'no overflow row');
+  })();
+
+  group('Missing home surfaces (no silent bench)');
+  (function(){
+    // Stephanie Poteet: on Gamma-VAB roster, no home on file.
+    var steph = { name:'stephanie poteet', home:null,
+      rank: (function(){ var r = mkRank(); r.team='Gamma-VAB'; return r; })() };
+    var samantha = rep('samantha ludwig','virginia beach|va'); samantha.rank.team = 'Gamma-VAB';
+    var steven = rep('steven forss','virginia beach|va'); steven.rank.team = 'Gamma-VAB';
+    var leads = [ mkLead({ 'City':'Norfolk', 'State':'VA', 'Market':'Hampton Roads' }) ];
+    var inp = mkInput(leads, [samantha, steven], { market:'Hampton Roads' });
+    inp.rank['stephanie poteet'] = steph.rank;
+    inp.d60['stephanie poteet'] = { nsli:5000, close:20, issued:20, vol:100000 };
+    // homes intentionally missing for stephanie
+    inp.fieldRoster = ['stephanie poteet','samantha ludwig','steven forss'];
+    var r = E.run(inp);
+    ok('missing home surfaced by name', r.missingData.indexOf('stephanie poteet') >= 0);
+    ok('reps with homes place normally',
+      r.fieldAvail.map(function(a){ return a.c; }).sort().join(',') === 'samantha ludwig,steven forss');
+  })();
+
+  group('Per-market drive cap and BIG floor');
+  (function(){
+    // Same setup, run with default vs a stricter cap.
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var leads = [ mkLead({ 'Customer Name':'Frederick lead', 'City':'Frederick', 'State':'MD' }) ];
+    var rDefault = E.run(mkInput(leads, [titus]));
+    ok('with default 120m cap, Frederick assigns', rDefault.rows[0].rep !== null);
+    var rTight = E.run(mkInput(leads, [titus], { ceil:60 }));
+    eq('with a 60m cap, Frederick becomes unfilled', rTight.rows[0].rep, null);
+    // Floor: give a weak rep a BIG (siding) lead — with the default floor it's unfilled.
+    var weak = rep('titus smith','bowie|md'); weak.rank.team = 'Beta';
+    ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
+    var big = mkLead({ 'Product':'SIDING', 'City':'Bowie' });
+    var inpF = mkInput([big], [weak]);
+    inpF.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
+    inpF.global60 = 500;
+    var rHi = E.run(Object.assign({}, inpF, { floor:5000 }));
+    eq('BIG unfilled at $5,000 floor', rHi.rows[0].rep, null);
+    var rLo = E.run(Object.assign({}, inpF, { floor:0 }));
+    ok('BIG assigns once the floor is dropped to $0', rLo.rows[0].rep !== null);
+  })();
+
+  group('DC parity (byte-identical for non-bath-combo leads)');
+  (function(){
+    // A DC Metro run with fixture leads that don\'t touch bath scoring should give the
+    // same board it always did. This is a smoke check — real parity is diffed against
+    // lead_engine.py on historical shifts.
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var stephen = rep('stephen bryan','laurel|md'); stephen.rank.team = 'Delta';
+    var leads = [
+      mkLead({ 'Customer Name':'A', 'City':'Bowie', 'Notes':'6 windows' }),
+      mkLead({ 'Customer Name':'B', 'City':'Laurel', 'Product':'DOORS', 'Notes':'3 storms' })
+    ];
+    var r = E.run(mkInput(leads, [titus, stephen]));
+    ok('two assignments', r.counts.assigned === 2 && r.counts.unfilled === 0);
+    ok('a bath board would be empty here', r.bathRows.length === 0);
+    ok('no wrong-team warnings for a clean DC run', r.wrongTeamField.length === 0);
+  })();
+}
+</script>
+</body>
+</html>
