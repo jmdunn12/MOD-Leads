@@ -481,6 +481,14 @@ function canon(n, aliases){ var s = low(n); return (aliases && aliases[s]) || DE
 function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }); }
 
 // ---------------- notes parsing ----------------
+// Call-center abbreviation glossary (manager rules, 2026-07-17). Only ED affects
+// counts — the rest describe the home/appointment and must stay inert:
+//   SFH        = single family home            (property type, not a product)
+//   ED / 1-ED  = entry door (dash or space)    -> counts as a front/entry door
+//   HOA        = homeowners association        (not a product)
+//   SO         = single owner                  (not a product)
+//   one legger = only one household member home (appointment note, not a count)
+//   double hung / single hung = window TYPE descriptors ("2 double hung windows" = 2)
 var WORDNUM = {one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
   eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,twenty:20};
 var NUM = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty)';
@@ -523,7 +531,8 @@ function parseDoors(str){
     return new RegExp(kw).test(s) ? dflt : 0;
   }
   var front = cnt('(?:fed\\b|front\\s+entry\\s+doors?|front\\s+doors?|entry\\s+doors?)');
-  var m = all(new RegExp('(?<!\\d)'+NUM+'\\s+ed\\b'), s), i;
+  // "ED" is call-center shorthand for entry door: "2 ed" and the dashed "1-ed" both count
+  var m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]+ed\\b'), s), i;
   for(i=0;i<m.length;i++) front = Math.max(front, nn(m[i][1]));
   var storm = cnt('storms?(?:\\s+doors?)?\\b');
   var slide = cnt('(?:sgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');

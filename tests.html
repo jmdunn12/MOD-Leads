@@ -162,6 +162,30 @@ function runAll(E){
   eq('front type tracked', E.parseDoors('front entry door').types, ['front']);
   eq('sliding type tracked', E.parseDoors('sliding glass door').types, ['sliding']);
 
+  group('Notes parsing — call-center abbreviations (rules 2026-07-17)');
+  (function(){
+    // ED = entry door, both spaced and dashed forms
+    eq('"1-ed" counts as 1 door', E.parseDoors('sfh, 1-ed').count, 1);
+    eq('"1-ed" is typed as front/entry', E.parseDoors('sfh, 1-ed').types, ['front']);
+    eq('"2-ed" counts as 2', E.parseDoors('2-ed, so').count, 2);
+    eq('"2 ed" (spaced) still works', E.parseDoors('2 ed').count, 2);
+    eq('1-ed tiers as MEDIUM (front-entry rule)', E.tierOf('DOORS', 0, false, 1, ['front']), 'MEDIUM');
+    var d = E.describeLead(mkLead({ Product:'DOORS', Notes:'SFH, one legger, 1-ED' }), null);
+    eq('full lead: "SFH, one legger, 1-ED" → 1 door, MEDIUM', d.d + '/' + d.tier, '1/MEDIUM');
+
+    // Everything else is descriptive and must NOT produce counts
+    eq('SFH is inert (windows)', E.parseWindows('sfh, bp, wants estimate').count, 0);
+    eq('SFH is inert (doors)', E.parseDoors('sfh, bp, wants estimate').count, 0);
+    eq('HOA is inert', E.parseDoors('hoa approval needed').count, 0);
+    eq('SO is inert', E.parseDoors('so, sfh').count, 0);
+    eq('"one legger" does not count as anything (windows)', E.parseWindows('one legger, needs quote').count, 0);
+    eq('"one legger" does not count as anything (doors)', E.parseDoors('one legger, needs quote').count, 0);
+    eq('"double hung" is a type: "2 double hung windows" = 2', E.parseWindows('2 double hung windows').count, 2);
+    eq('"single hung window" alone counts nothing', E.parseWindows('single hung window').count, 0);
+    var w = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'SFH, SO, HOA, one legger — replace 6 double hung windows' }), null);
+    eq('abbreviation soup still parses the real count', w.w, 6);
+  })();
+
   group('Notes parsing — product tags (word boundaries)');
   var pf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'customer will bring proof of ownership' }), null);
   ok('"proof of ownership" is NOT a roof lead', pf.roof === false, 'roof=' + pf.roof);

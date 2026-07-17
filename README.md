@@ -97,6 +97,21 @@ To move to a new device or restore after clearing your browser: click **Restore 
 
 ---
 
+## Call-center abbreviations the parser knows
+
+These show up in the Notes field from the call center. Only **ED** affects the opportunity count — the rest are descriptive and the parser deliberately ignores them:
+
+| Abbreviation | Means | Effect on parsing |
+|---|---|---|
+| `SFH` | single family home | none (property type) |
+| `ED`, `1-ED`, `2 ed` | entry door | counts as front/entry door(s) — one entry door makes the lead at least MEDIUM |
+| `HOA` | homeowners association | none |
+| `SO` | single owner | none |
+| `one legger` | only one household member will be home | none |
+| `double hung` / `single hung` | window type | none by itself — "2 double hung windows" still counts 2 |
+
+If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
+
 ## When something new shows up
 
 - **New city** — the app catches it and shows a small form row for each unknown city (with its state). Two ways to get coordinates:
