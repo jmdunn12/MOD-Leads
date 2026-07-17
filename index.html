@@ -234,6 +234,10 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
           <span class="name" id="name-prior">AM board (and PM board for EVE) — most recent last</span>
         </label>
       </div>
+      <div class="col">
+        <label class="lbl">…or chain from a saved board</label>
+        <select id="savedPriorSel" style="width:auto;min-width:220px"><option value="">Saved boards…</option></select>
+      </div>
     </div>
 
     <div class="col">
@@ -263,6 +267,12 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
   </div>
 </section>
 
+<!-- ============ SAVED BOARDS ============ -->
+<section class="panel" id="boardsPanel" hidden>
+  <div class="head"><h2>Saved boards</h2><span class="muted">stored in this browser — newest first, last 14 kept</span></div>
+  <div class="body"><div id="boardsList"></div></div>
+</section>
+
 <!-- ============ UNKNOWN CITIES ============ -->
 <section class="panel" id="geoPanel" hidden>
   <div class="head"><h2>Unknown cities</h2><span class="muted">a lead or rep origin has no coordinates — these can't be assigned until you add them</span></div>
@@ -275,6 +285,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
     <h2>Board</h2>
     <span class="spacer"></span>
     <button class="sm" id="btnRerun">Re-run with pins</button>
+    <button class="sm" id="btnSaveBoard">Save board</button>
     <button class="primary" id="btnXlsx">Download .xlsx</button>
   </div>
   <div class="body" style="padding-bottom:0">
@@ -1806,6 +1817,7 @@ wireDrop('prior', function(files){
   var list = Array.prototype.slice.call(files);
   chip('prior', '', 'reading…');
   state.origins = {};
+  state.priorSources = list.map(function(f){ return f.name; });
   var seq = Promise.resolve();
   list.forEach(function(f){
     seq = seq.then(function(){
@@ -1937,6 +1949,139 @@ function renderGeoForm(missing){
   host.appendChild(el('p', { class:'muted', style:'margin:4px 0 0;font-size:12px',
     text:'Click Google Maps, right-click the exact spot, choose “What’s here?”, then click the coordinates it shows (that copies them) and paste into the box. Or use Auto-lookup (OpenStreetMap) and verify. Saved here forever, on this browser.' }));
 }
+
+// ---------------- saved boards ----------------
+// A saved board = the finished result + just enough of the parsed lead sheet to
+// rebuild the .xlsx. Lives in its own localStorage key (not the settings backup),
+// newest first, last 14 kept. One slot per (day, slot, market) — re-saving replaces.
+var BOARDS_KEY = 'lae.boards.v1';
+function loadBoards(){
+  try { return JSON.parse(localStorage.getItem(BOARDS_KEY) || '[]'); } catch(e){ return []; }
+}
+function storeBoards(list){
+  list.sort(function(a,b){ return b.when.localeCompare(a.when); });
+  try { localStorage.setItem(BOARDS_KEY, JSON.stringify(list.slice(0, 14))); }
+  catch(e){ alert('Could not save the board — browser storage is full: ' + e.message); }
+}
+function boardLabel(rec){
+  var d = new Date(rec.when), pad = function(n){ return String(n).padStart(2,'0'); };
+  var mkt = rec.market === 'ALL' ? 'All markets' : rec.market;
+  return pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' + rec.slot + ' · ' + mkt;
+}
+// JSON round-trip turns the date cells into ISO strings; turn them back into Dates
+// (only for columns the source export formatted as dates) so the xlsx stays right.
+function reviveBoard(rec){
+  var b = JSON.parse(JSON.stringify(rec));
+  var fmt = (b.leadData && b.leadData.fmt) || {};
+  function fix(row){
+    if(!row) return;
+    Object.keys(fmt).forEach(function(k){
+      var v = row[k];
+      if(typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) row[k] = new Date(v);
+    });
+  }
+  ((b.leadData && b.leadData.rows) || []).forEach(fix);
+  (b.result.rows || []).concat(b.result.bathRows || []).forEach(function(x){ fix(x.lead); });
+  return b;
+}
+
+$('#btnSaveBoard').addEventListener('click', function(){
+  if(!state.result || !state.leadData){ alert('Run a board first.'); return; }
+  var now = new Date();
+  var rec = {
+    id: Date.now(), when: now.toISOString(), dateKey: now.toISOString().slice(0,10),
+    slot: state.slot, market: state.market,
+    counts: state.result.counts,
+    leadData: { hdr: state.leadData.hdr, fmt: state.leadData.fmt,
+                sheetName: state.leadData.sheetName, rows: state.leadData.rows },
+    result: state.result
+  };
+  var list = loadBoards().filter(function(b){
+    return !(b.dateKey === rec.dateKey && b.slot === rec.slot && b.market === rec.market);
+  });
+  list.push(rec);
+  storeBoards(list);
+  renderBoardsList(); refreshSavedPriorSel();
+  var btn = this; btn.textContent = 'Saved ✓';
+  setTimeout(function(){ btn.textContent = 'Save board'; }, 1500);
+});
+
+function viewBoard(id){
+  var rec = loadBoards().filter(function(b){ return b.id === id; })[0];
+  if(!rec) return null;
+  var b = reviveBoard(rec);
+  state.result = b.result;
+  state.leadData = b.leadData;
+  state.leadFile = null;
+  state.market = rec.market;
+  state.slot = rec.slot;
+  $$('#markets button').forEach(function(x){ x.setAttribute('aria-pressed', String(x.dataset.market === rec.market)); });
+  $$('#slots button').forEach(function(x){ x.setAttribute('aria-pressed', String(x.dataset.slot === rec.slot)); });
+  $('#priorRow').hidden = rec.slot === 'AM';
+  buildRoster();
+  renderResult(state.result);
+  $('#resultPanel').hidden = false;
+  $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+  return rec;
+}
+
+// Pull rep -> lead-city origins out of a saved board (assigned + bath rows; bench
+// reps stay unmapped so they correctly fall back to home). Later applications win,
+// so for EVE: apply the AM board first, then the PM board.
+function applySavedOrigins(id){
+  var rec = loadBoards().filter(function(b){ return b.id === id; })[0];
+  if(!rec) return;
+  (rec.result.rows || []).concat(rec.result.bathRows || []).forEach(function(x){
+    if(!x.rep) return;
+    var city = String(x.lead['City'] || '').trim().toLowerCase();
+    if(!city) return;
+    var st = String(x.lead['State'] || '').trim().toLowerCase();
+    state.origins[x.rep.c] = st ? city + '|' + st : city;
+  });
+  state.priorSources = (state.priorSources || []).concat(['saved: ' + boardLabel(rec)]);
+  chip('prior', 'ok', Object.keys(state.origins).length + ' origins');
+  nameOf('prior', state.priorSources.join(' → '));
+}
+
+function renderBoardsList(){
+  var list = loadBoards();
+  var panel = $('#boardsPanel'), host = $('#boardsList');
+  host.innerHTML = '';
+  if(!list.length){ panel.hidden = true; return; }
+  panel.hidden = false;
+  list.forEach(function(rec){
+    var c = rec.counts || {};
+    var bathN = (c.bathAssigned || 0) + (c.bathOverflow || 0);
+    var meta = new Date(rec.when).toLocaleString() + ' — ' + (c.assigned || 0) + ' assigned' +
+      (bathN ? ', ' + bathN + ' bath' : '') + ((c.unfilled || 0) ? ', ' + c.unfilled + ' unfilled' : '');
+    host.appendChild(el('div', { class:'row', style:'align-items:center;margin-bottom:6px' }, [
+      el('b', { text: boardLabel(rec), style:'min-width:170px' }),
+      el('span', { class:'muted', text: meta, style:'font-size:12px' }),
+      el('span', { class:'spacer' }),
+      el('button', { class:'sm', text:'View', onclick:function(){ viewBoard(rec.id); } }),
+      el('button', { class:'sm', text:'Download', onclick:function(){ if(viewBoard(rec.id)) $('#btnXlsx').click(); } }),
+      el('button', { class:'sm', text:'Chain from this', onclick:function(){ applySavedOrigins(rec.id); } }),
+      el('button', { class:'sm danger', text:'Delete', onclick:function(){
+        if(!confirm('Delete saved board "' + boardLabel(rec) + '"?')) return;
+        storeBoards(loadBoards().filter(function(b){ return b.id !== rec.id; }));
+        renderBoardsList(); refreshSavedPriorSel();
+      } })
+    ]));
+  });
+}
+
+function refreshSavedPriorSel(){
+  var sel = $('#savedPriorSel');
+  sel.innerHTML = '<option value="">Saved boards…</option>';
+  loadBoards().forEach(function(rec){
+    sel.appendChild(el('option', { value:String(rec.id), text: boardLabel(rec) }));
+  });
+}
+$('#savedPriorSel').addEventListener('change', function(){
+  if(!this.value) return;
+  applySavedOrigins(parseInt(this.value, 10));
+  this.value = '';
+});
 
 // ---------------- results ----------------
 var sortState = { key:null, dir:1 };
@@ -2109,7 +2254,7 @@ var THIN = { style:'thin', color:{ argb:'FF808080' } };
 var BORDER = { top:THIN, left:THIN, bottom:THIN, right:THIN };
 
 $('#btnXlsx').addEventListener('click', function(){
-  if(!state.result || !state.leadFile) return;
+  if(!state.result || !state.leadData) return;   // leadData, not leadFile — restored boards have no file
   var btn = this, old = btn.textContent; btn.textContent = 'building…'; btn.disabled = true;
   buildXlsx().then(function(){ btn.textContent = old; btn.disabled = false; })
     .catch(function(e){ alert('Could not build the file: ' + e.message); console.error(e); btn.textContent = old; btn.disabled = false; });
@@ -2416,11 +2561,13 @@ $('#importFile').addEventListener('change', function(){
   this.value = '';
 });
 $('#btnWipe').addEventListener('click', function(){
-  if(!confirm('Clear cached reference data, saved cities, aliases and presets from this browser?')) return;
+  if(!confirm('Clear cached reference data, saved cities, aliases, presets AND saved boards from this browser?')) return;
   localStorage.removeItem(KEY);
   localStorage.removeItem(OLD_KEY);
+  localStorage.removeItem(BOARDS_KEY);
   store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{} };
   load(); refreshRefs(); refreshPresets(); buildRoster();
+  renderBoardsList(); refreshSavedPriorSel();
 });
 
 // ---------------- setup toggle ----------------
@@ -2435,6 +2582,7 @@ refFile('rank', parseRank);
 refFile('d60', parse60);
 refFile('homes', parseHomes);
 load(); refreshRefs(); refreshPresets(); buildRoster();
+renderBoardsList(); refreshSavedPriorSel();
 })();
 </script>
 </body>

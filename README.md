@@ -35,6 +35,17 @@ Everything cached on your laptop stays on your laptop — same story on your pho
 
 Pick **All markets** in the market row to run the whole shift at once. Every market's leads are assigned against that market's own crew (DC leads → Beta/Delta, Hampton Roads → Gamma-VAB, Richmond → Gamma-RVA), bath leads across all markets fill from one shared Kappa pool (never double-booked), and everything lands on **one board with a Market column** — same for the downloaded .xlsx. Rep checklists for all three markets show at once, grouped by market. You can load any market's saved preset from the dropdown; to save a preset, switch to that single market first.
 
+### Saved boards
+
+After a run, click **Save board** (next to Download). The finished board is stored in your browser — it survives closing the tab. A **Saved boards** panel lists the last 14 (one slot per day/slot/market — re-saving the same shift replaces it). From the list you can:
+
+- **View** — bring the board back on screen, exactly as assigned
+- **Download** — rebuild the same .xlsx, even days later
+- **Chain from this** — use it as the prior board for drive chaining
+- **Delete** — remove it
+
+**The big time-saver:** for PM and EVE you no longer need to re-upload the AM file. Pick the saved AM board from the **"…or chain from a saved board"** dropdown next to the prior-board box. For EVE, pick AM first, then PM — the most recent pick wins, same as file uploads. Saved boards live only in that browser (they're not in the settings backup), so save the .xlsx too if you need a permanent copy.
+
 ### What the market picker does
 
 The **Team** column on your power ranking assigns every rep to one of five teams:
