@@ -1,0 +1,10 @@
+# local-only working files — never deploy these
+_fixtures/
+*.zip
+.claude/
+
+# OneDrive / OS cruft
+*~
+*.tmp
+Thumbs.db
+desktop.ini

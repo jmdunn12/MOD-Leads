@@ -370,7 +370,8 @@ function runAll(E){
     var unk = [ mkLead({ 'Customer Name':'Nowhere', 'City':'Shangri-La' }) ];
     var r3 = E.run(mkInput(unk, [rep('titus smith','bowie')]));
     eq('unknown city → unfilled', r3.rows[0].rep, null);
-    ok('unknown city surfaced for the UI form', r3.missingGeo.indexOf('shangri-la') >= 0, JSON.stringify(r3.missingGeo));
+    ok('unknown city surfaced for the UI form (as {city,state})',
+      r3.missingGeo.some(function(m){ return m.city === 'shangri-la'; }), JSON.stringify(r3.missingGeo));
   })();
 
   // ---------- 8. tier ordering ----------

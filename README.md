@@ -1,5 +1,4 @@
-[README.md](https://github.com/user-attachments/files/30134673/README.md)
-# MOD-Leads# Lead Assignment Engine — how to use it
+# Lead Assignment Engine — how to use it
 
 Everything runs inside your browser. Nothing you upload leaves the machine.
 
@@ -96,7 +95,10 @@ To move to a new device or restore after clearing your browser: click **Restore 
 
 ## When something new shows up
 
-- **New city** — the app catches it and shows a small form: "Broadlands — latitude, longitude". Click **Look up** (or type from Google Maps). Click **Save**. Persists forever. Coordinates are keyed by `city|state` so Mechanicsville, VA and Mechanicsville, MD stay distinct.
+- **New city** — the app catches it and shows a small form row for each unknown city (with its state). Two ways to get coordinates:
+  - **Google Maps ↗** — opens Google Maps searched to that city in a new tab. Right-click the exact spot → **"What's here?"** → click the lat/long card at the bottom (that copies it) → paste into the box on the form. It auto-splits into latitude and longitude. You can also paste a whole Google Maps URL — it pulls the coordinates out.
+  - **Auto-lookup** — fills them from OpenStreetMap; verify against Google Maps before saving.
+  Click **Save**. Coordinates persist forever, keyed by `city|state`, so Mechanicsville, VA and Mechanicsville, MD stay distinct. If the app doesn't already know the state, it asks for a 2-letter code so it saves under the right key.
 - **New product code** — the row still runs, scored as Windows, and gets flagged as unknown. In Setup → **Product mappings**, add e.g. `COMBO_SID_WIN_GUT` → `Siding, Windows, Gutters`. Bath is now a valid component too — combos like `COMBO_BATH_WIN_DOR` are scored on Bath + Windows + Doors.
 - **New rep** — they show up automatically once they're on the power ranking AND the phone list. If they're on the ranking but not the phone list yet, use Setup → **Home overrides** — format the home as `city|state` (e.g. `crofton|md`).
 - **Rep name spelled wrong on prior board** — Setup → **Name aliases**, e.g. `frank hill` → `franklin hill`.
