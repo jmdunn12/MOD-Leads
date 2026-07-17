@@ -184,6 +184,36 @@ function runAll(E){
     eq('"single hung window" alone counts nothing', E.parseWindows('single hung window').count, 0);
     var w = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'SFH, SO, HOA, one legger — replace 6 double hung windows' }), null);
     eq('abbreviation soup still parses the real count', w.w, 6);
+
+    // second batch of abbreviations (same day):
+    // DHW = double hung window → counts as windows
+    eq('"6 dhw" = 6 windows', E.parseWindows('6 dhw').count, 6);
+    eq('"2-dhw" (dashed) = 2 windows', E.parseWindows('2-dhw').count, 2);
+    eq('"six dhw" word-number works', E.parseWindows('six dhw').count, 6);
+    ok('"6 dhw" marks the count as known', E.parseWindows('6 dhw').known === true);
+    eq('bare "dhw" with no number counts nothing (window convention)', E.parseWindows('replace dhw').count, 0);
+    // SD = storm door
+    eq('"2 sd" = 2 storm doors', E.parseDoors('2 sd').count, 2);
+    eq('"2-sd" (dashed) works', E.parseDoors('2-sd').count, 2);
+    eq('bare "sd" defaults to 1 (typed-door convention)', E.parseDoors('sfh, sd').count, 1);
+    eq('"sd" typed as storm', E.parseDoors('sfh, sd').types, ['storm']);
+    // FE = front entry door
+    eq('bare "fe" defaults to 1 front door', E.parseDoors('so, fe').count, 1);
+    eq('"1-fe" (dashed) works', E.parseDoors('1-fe').count, 1);
+    eq('"2 fe" = 2', E.parseDoors('2 fe').count, 2);
+    eq('"fe" typed as front', E.parseDoors('so, fe').types, ['front']);
+    eq('"fed" still matches fed, not fe', E.parseDoors('1 fed').count, 1);
+    eq('fe tiers MEDIUM (front-entry rule)', E.tierOf('DOORS', 0, false, 1, ['front']), 'MEDIUM');
+    // SGD = sliding glass door (long-standing; locked in with the new batch)
+    eq('bare "sgd" defaults to 1 sliding', E.parseDoors('sgd').count, 1);
+    eq('"2 sgd" = 2', E.parseDoors('2 sgd').count, 2);
+    // WIS = walk in shower — descriptive, inert
+    eq('WIS is inert (windows)', E.parseWindows('wis, sfh').count, 0);
+    eq('WIS is inert (doors)', E.parseDoors('wis, sfh').count, 0);
+    var mix = E.describeLead(mkLead({ Product:'DOORS', Notes:'SFH, SO, one legger — 1-FE and 2 SD, wis quote later' }), null);
+    eq('mixed shorthand: "1-FE and 2 SD" → 3 doors', mix.d, 3);
+    eq('…typed as front + storm', mix.dtypes.slice().sort(), ['front','storm']);
+    eq('…and 3 doors tiers BIG', mix.tier, 'BIG');
   })();
 
   group('Notes parsing — product tags (word boundaries)');

@@ -99,14 +99,19 @@ To move to a new device or restore after clearing your browser: click **Restore 
 
 ## Call-center abbreviations the parser knows
 
-These show up in the Notes field from the call center. Only **ED** affects the opportunity count — the rest are descriptive and the parser deliberately ignores them:
+These show up in the Notes field from the call center. The counting ones feed the Opportunity column and tiering; the descriptive ones are deliberately ignored:
 
 | Abbreviation | Means | Effect on parsing |
 |---|---|---|
-| `SFH` | single family home | none (property type) |
 | `ED`, `1-ED`, `2 ed` | entry door | counts as front/entry door(s) — one entry door makes the lead at least MEDIUM |
+| `FE`, `1-FE` | front entry door | counts as front/entry door(s), same tier rule |
+| `SD`, `2-SD` | storm door | counts as storm door(s); bare `sd` counts 1 |
+| `SGD` | sliding glass door | counts as sliding door(s); bare `sgd` counts 1 |
+| `DHW`, `6 dhw` | double hung window | counts as windows ("6 dhw" = 6); needs a number |
+| `SFH` | single family home | none (property type) |
 | `HOA` | homeowners association | none |
 | `SO` | single owner | none |
+| `WIS` | walk in shower | none — bath routing goes by the Product code, not notes |
 | `one legger` | only one household member will be home | none |
 | `double hung` / `single hung` | window type | none by itself — "2 double hung windows" still counts 2 |
 
