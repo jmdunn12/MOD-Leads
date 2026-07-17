@@ -31,6 +31,10 @@ Everything runs inside your browser. Nothing you upload leaves the machine.
 
 Everything cached on your laptop stays on your laptop — same story on your phone.
 
+### All-markets mode (one page)
+
+Pick **All markets** in the market row to run the whole shift at once. Every market's leads are assigned against that market's own crew (DC leads → Beta/Delta, Hampton Roads → Gamma-VAB, Richmond → Gamma-RVA), bath leads across all markets fill from one shared Kappa pool (never double-booked), and everything lands on **one board with a Market column** — same for the downloaded .xlsx. Rep checklists for all three markets show at once, grouped by market. You can load any market's saved preset from the dropdown; to save a preset, switch to that single market first.
+
 ### What the market picker does
 
 The **Team** column on your power ranking assigns every rep to one of five teams:

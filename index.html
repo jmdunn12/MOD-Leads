@@ -201,6 +201,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
       <div class="col">
         <label class="lbl">Market</label>
         <div class="slots" id="markets" role="group" aria-label="Market">
+          <button data-market="ALL" aria-pressed="false">All markets</button>
           <button data-market="DC Metro" aria-pressed="true">DC Metro</button>
           <button data-market="Hampton Roads" aria-pressed="false">Hampton Roads</button>
           <button data-market="Richmond" aria-pressed="false">Richmond</button>
@@ -1164,6 +1165,100 @@ function originDisp(o){
   var p = splitLoc(o); return title(p.city);
 }
 
+// ================= all-markets run =================
+// Runs every market in one pass: each market's leads against that market's crew,
+// one shared Kappa pool chained through so a bath rep is never double-booked,
+// results merged into a single board with rows tagged by market.
+// input: { slot, leads, rosters:{market:[names]}, bathRoster:[names], rank, d60,
+//          global60, homes, origins, geo, aliases, prodMap,
+//          ceilBy:{market:min}, floorBy:{market:$}, manualPins }
+function runAllMarkets(input){
+  var aliases = input.aliases || DEFAULT_ALIASES;
+  var bathPool = (input.bathRoster || []).slice();
+  var subs = [];
+  MARKETS.forEach(function(M){
+    var sub = run({
+      market: M, slot: input.slot, leads: input.leads,
+      fieldRoster: (input.rosters && input.rosters[M]) || [],
+      bathRoster: bathPool,
+      rank: input.rank, d60: input.d60, global60: input.global60,
+      homes: input.homes, origins: input.origins, geo: input.geo,
+      aliases: input.aliases, prodMap: input.prodMap,
+      ceil: input.ceilBy ? input.ceilBy[M] : undefined,
+      floor: input.floorBy ? input.floorBy[M] : undefined,
+      manualPins: input.manualPins
+    });
+    // consume Kappa reps this market used (assigned or pinned) before the next market runs
+    var used = {};
+    sub.bathRows.forEach(function(r){ if(r.rep && !r.overflow) used[r.rep.c] = true; });
+    bathPool = bathPool.filter(function(n){ return !used[canon(n, aliases)]; });
+    subs.push({ market: M, r: sub });
+  });
+
+  // --- skips: classify each lead ONCE against its own market (sub-run skip counts
+  // would triple-count every lead as "other market" in the two runs it doesn't belong to)
+  var marketSet = {};
+  MARKETS.forEach(function(m){ marketSet[low(m)] = true; });
+  var skips = { market:0, cancelled:0, open:0, campaign:0, bath:0 };
+  var dropped = {};
+  (input.leads || []).forEach(function(l, i){
+    var why = classifySkip(l, l['Market']);
+    if(why === 'bath'){ skips.bath++; return; }
+    if(why && why !== 'market'){ skips[why]++; dropped[i] = why; return; }
+    if(!marketSet[low(l['Market'])]){ skips.market++; dropped[i] = 'market'; }
+  });
+
+  // --- merge ---
+  var rows = [], bench = [], bathRows = [], pins = {};
+  var fieldAvail = [], wrongTeamField = [], wrongTeamBath = [];
+  var missingGeo = [], stateFallbacks = [], missingData = [], unknownProducts = {};
+  function pushUnique(arr, item, keyFn){
+    if(!arr.some(function(x){ return keyFn(x) === keyFn(item); })) arr.push(item);
+  }
+  subs.forEach(function(s){
+    s.r.rows.forEach(function(row){ row.market = s.market; rows.push(row); });
+    s.r.bench.forEach(function(b){ b.market = s.market; bench.push(b); });
+    s.r.bathRows.forEach(function(row){ row.market = s.market; bathRows.push(row); });
+    Object.keys(s.r.pins).forEach(function(k){ pins[k] = s.r.pins[k]; });
+    s.r.fieldAvail.forEach(function(a){ fieldAvail.push(a); });
+    s.r.missingGeo.forEach(function(m){ pushUnique(missingGeo, m, function(x){ return x.city + '|' + x.state; }); });
+    s.r.stateFallbacks.forEach(function(sf){ pushUnique(stateFallbacks, sf, function(x){ return x.key; }); });
+    s.r.missingData.forEach(function(n){ if(missingData.indexOf(n) < 0) missingData.push(n); });
+    s.r.wrongTeamField.forEach(function(w){ pushUnique(wrongTeamField, w, function(x){ return x.rep + '|' + x.reason; }); });
+    s.r.wrongTeamBath.forEach(function(w){ pushUnique(wrongTeamBath, w, function(x){ return x.rep + '|' + x.reason; }); });
+    s.r.unknownProducts.forEach(function(p){ unknownProducts[p] = true; });
+  });
+  // bath bench: full Kappa pool (first run saw all of it) minus everyone used anywhere
+  var usedBath = {};
+  bathRows.forEach(function(r){ if(r.rep && !r.overflow) usedBath[r.rep.c] = true; });
+  var bathAvail = subs.length ? subs[0].r.bathAvail : [];
+  var bathBench = bathAvail.filter(function(a){ return !usedBath[a.c]; })
+    .map(function(a){ var g = input.d60[a.c]; return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })
+    .sort(function(x,y){ return y.vol - x.vol; });
+
+  return {
+    market: 'ALL', isAll: true, ceil: null, floor: null,
+    rows: rows, bench: bench, bathRows: bathRows, bathBench: bathBench,
+    dropped: dropped, skips: skips,
+    missingGeo: missingGeo, stateFallbacks: stateFallbacks,
+    missingData: missingData, wrongTeamField: wrongTeamField, wrongTeamBath: wrongTeamBath,
+    unknownProducts: Object.keys(unknownProducts),
+    pins: pins, avail: fieldAvail.concat(bathAvail), fieldAvail: fieldAvail, bathAvail: bathAvail,
+    overflowUsed: bathRows.some(function(r){ return r.overflow; }),
+    counts: {
+      assigned: rows.filter(function(r){ return r.rep; }).length,
+      unfilled: rows.filter(function(r){ return !r.rep; }).length,
+      pinned: Object.keys(pins).length,
+      skipped: Object.keys(dropped).length,
+      bench: bench.length,
+      bathAssigned: bathRows.filter(function(r){ return r.rep && !r.overflow; }).length,
+      bathOverflow: bathRows.filter(function(r){ return r.rep && r.overflow; }).length,
+      bathUnfilled: bathRows.filter(function(r){ return !r.rep; }).length,
+      bathBench: bathBench.length
+    }
+  };
+}
+
 global.ENGINE = {
   CONST: CONST, PRODC: PRODC, PRODUCTS: PRODUCTS,
   MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM,
@@ -1176,7 +1271,7 @@ global.ENGINE = {
   haversine: haversine, driveMinutes: driveMinutes,
   hungarianMin: hungarianMin, hungarianMax: hungarianMax,
   classifySkip: classifySkip, findNotePins: findNotePins,
-  makeScorer: makeScorer, global60Of: global60Of, run: run
+  makeScorer: makeScorer, global60Of: global60Of, run: run, runAllMarkets: runAllMarkets
 };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -1534,20 +1629,31 @@ function repRow(c, homes, checkedMap, onChange, extraHint){
 function buildRoster(){
   var field = $('#reps'), bath = $('#bathReps');
   field.innerHTML = ''; bath.innerHTML = '';
-  $('#marketLabel').textContent = state.market;
+  var isAll = state.market === 'ALL';
+  $('#marketLabel').textContent = isAll ? 'All markets' : state.market;
   if(!store.refs || !store.refs.rank || !store.refs.homes){
     field.appendChild(el('span', { class:'muted', text:'Upload the reference files above to build the rep list.' }));
     bath.appendChild(el('span', { class:'muted', text:'—' }));
     return;
   }
   var homes = homesAll();
-  var fieldNames = repsForMarket(state.market);
-  var roster = currentRoster();
-  if(!fieldNames.length){
-    field.appendChild(el('span', { class:'muted', text:'No reps found for ' + state.market + '. Check the Team column in the power ranking.' }));
-  } else {
-    fieldNames.forEach(function(c){ field.appendChild(repRow(c, homes, roster, updateRun)); });
-  }
+  var marketsToShow = isAll ? E.MARKETS : [state.market];
+  marketsToShow.forEach(function(M){
+    var names = repsForMarket(M);
+    if(isAll){
+      // full-width subheading splitting the grid into market sections
+      field.appendChild(el('div', { style:'grid-column:1/-1;padding:6px 4px 2px' }, [
+        el('h3', { text: M + ' (' + names.length + ')' })
+      ]));
+    }
+    if(!names.length){
+      field.appendChild(el('span', { class:'muted', style:'grid-column:1/-1',
+        text:'No reps found for ' + M + '. Check the Team column in the power ranking.' }));
+      return;
+    }
+    if(!state.rosters[M]) state.rosters[M] = {};
+    names.forEach(function(c){ field.appendChild(repRow(c, homes, state.rosters[M], updateRun)); });
+  });
   var bathNames = bathReps();
   if(!bathNames.length){
     bath.appendChild(el('span', { class:'muted', text:'No Kappa reps on the power ranking.' }));
@@ -1564,8 +1670,17 @@ function rosterList(){
 function bathRosterList(){
   return Object.keys(state.bathRoster).filter(function(c){ return state.bathRoster[c]; });
 }
+function allRosterCount(){
+  var n = 0;
+  E.MARKETS.forEach(function(M){
+    var r = state.rosters[M] || {};
+    n += Object.keys(r).filter(function(c){ return r[c]; }).length;
+  });
+  return n;
+}
 function updateRun(){
-  var n = rosterList().length, bn = bathRosterList().length;
+  var n = state.market === 'ALL' ? allRosterCount() : rosterList().length;
+  var bn = bathRosterList().length;
   $('#rosterCount').textContent = n ? '(' + n + ' checked)' : '';
   $('#bathRosterCount').textContent = bn ? '(' + bn + ' checked)' : '';
   var ready = !!(store.refs && store.refs.rank && store.refs.d60 && store.refs.homes && state.leadData && (n + bn));
@@ -1583,20 +1698,40 @@ function marketPresets(){
   return store.presets[state.market];
 }
 function refreshPresets(){
-  var sel = $('#presetSel'), presets = marketPresets();
+  var sel = $('#presetSel');
   sel.innerHTML = '<option value="">Roster presets…</option>';
+  if(state.market === 'ALL'){
+    // presets from every market, labeled "Market: name" — applying one fills that market's checkboxes
+    E.MARKETS.forEach(function(M){
+      var p = store.presets[M] || {};
+      Object.keys(p).sort().forEach(function(k){
+        sel.appendChild(el('option', { value: M + ':::' + k, text: M + ': ' + k + ' (' + p[k].length + ')' }));
+      });
+    });
+    return;
+  }
+  var presets = marketPresets();
   Object.keys(presets).sort().forEach(function(k){
     sel.appendChild(el('option', { value:k, text:k + ' (' + presets[k].length + ')' }));
   });
 }
 $('#presetSel').addEventListener('change', function(){
   var k = this.value; if(!k) return;
+  if(state.market === 'ALL'){
+    var parts = k.split(':::'), M = parts[0], name = parts[1];
+    var p = (store.presets[M] || {})[name] || [];
+    state.rosters[M] = {};
+    p.forEach(function(c){ state.rosters[M][c] = true; });
+    buildRoster();
+    return;
+  }
   var presets = marketPresets();
   state.rosters[state.market] = {};
   presets[k].forEach(function(c){ state.rosters[state.market][c] = true; });
   buildRoster();
 });
 $('#presetSave').addEventListener('click', function(){
+  if(state.market === 'ALL'){ alert('Switch to a single market to save a preset — in All-markets mode you can still load presets from any market.'); return; }
   var list = rosterList();
   if(!list.length){ alert('Check some reps first.'); return; }
   var name = prompt('Name this ' + state.market + ' roster:', $('#presetSel').value || '');
@@ -1671,11 +1806,9 @@ $('#runBtn').addEventListener('click', function(){ doRun(); });
 $('#btnRerun').addEventListener('click', function(){ doRun(); });
 
 function doRun(){
-  var input = {
-    market: state.market,
+  var common = {
     slot: state.slot,
     leads: state.leadData.rows,
-    fieldRoster: rosterList(),
     bathRoster: bathRosterList(),
     rank: store.refs.rank,
     d60: store.refs.d60,
@@ -1685,12 +1818,24 @@ function doRun(){
     geo: geoAll(),
     aliases: aliasAll(),
     prodMap: prodAll(),
-    ceil: store.ceil[state.market],
-    floor: store.floor[state.market],
     manualPins: state.manualPins
   };
   var r;
-  try { r = E.run(input); }
+  try {
+    if(state.market === 'ALL'){
+      var rosters = {};
+      E.MARKETS.forEach(function(M){
+        var m = state.rosters[M] || {};
+        rosters[M] = Object.keys(m).filter(function(c){ return m[c]; });
+      });
+      r = E.runAllMarkets(Object.assign(common, { rosters: rosters, ceilBy: store.ceil, floorBy: store.floor }));
+    } else {
+      r = E.run(Object.assign(common, {
+        market: state.market, fieldRoster: rosterList(),
+        ceil: store.ceil[state.market], floor: store.floor[state.market]
+      }));
+    }
+  }
   catch(err){ alert('Run failed: ' + err.message); console.error(err); return; }
   state.result = r;
   renderGeoForm(r.missingGeo);
@@ -1789,10 +1934,13 @@ function renderResult(r){
     if(r.counts.bathUnfilled) stat(r.counts.bathUnfilled, 'bath unfilled');
   }
   var sk = r.skips;
+  var capsTxt = r.isAll ? 'per-market caps apply'
+    : 'drive cap ' + r.ceil + 'm, BIG floor $' + r.floor.toLocaleString('en-US');
+  var marketTxt = r.isAll ? 'All markets' : r.market;
+  var mktSkipTxt = r.isAll ? sk.market + ' unknown market' : sk.market + ' other market';
   s.appendChild(el('span', { class:'muted', style:'font-size:12px', text:
-    r.market + ' · skips: ' + sk.cancelled + ' cancelled · ' + sk.open + ' open · ' + sk.campaign +
-    ' install consultant · ' + sk.bath + ' routed to bath · ' + sk.market + ' other market · ' +
-    'drive cap ' + r.ceil + 'm, BIG floor $' + r.floor.toLocaleString('en-US') }));
+    marketTxt + ' · skips: ' + sk.cancelled + ' cancelled · ' + sk.open + ' open · ' + sk.campaign +
+    ' install consultant · ' + sk.bath + ' routed to bath · ' + mktSkipTxt + ' · ' + capsTxt }));
 
   var fb = $('#flagBox'); fb.innerHTML = '';
   function notice(cls, title, items){
@@ -1823,7 +1971,10 @@ function renderResult(r){
 
   var cols = [
     { k:'cust',  t:'Customer', v:function(x){ return String(x.lead['Customer Name']||''); } },
-    { k:'city',  t:'City',     v:function(x){ return String(x.lead['City']||''); } },
+    { k:'city',  t:'City',     v:function(x){ return String(x.lead['City']||''); } }
+  ];
+  if(r.isAll) cols.push({ k:'mkt', t:'Market', v:function(x){ return x.market || String(x.lead['Market']||''); } });
+  cols = cols.concat([
     { k:'tier',  t:'Tier',     v:function(x){ return x.tier; } },
     { k:'opp',   t:'Opportunity', v:function(x){ return x.opp; } },
     { k:'rep',   t:'Rep',      v:function(x){ return x.rep ? x.rep.disp : ''; } },
@@ -1832,7 +1983,7 @@ function renderResult(r){
     { k:'eff',   t:'Eff. NSLI',v:function(x){ return x.eff; }, num:true },
     { k:'pin',   t:'Pin',      v:function(){ return ''; } },
     { k:'flags', t:'Flags',    v:function(x){ return x.flags.join('; '); } }
-  ];
+  ]);
   var thead = $('#board thead'); thead.innerHTML = '';
   var tr = el('tr');
   cols.forEach(function(c){
@@ -1898,7 +2049,7 @@ function renderResult(r){
       tr2.appendChild(el('td', { text:b.disp }));
       tr2.appendChild(el('td', { text:E.title((b.origin||'').split('|')[0]) }));
       tr2.appendChild(el('td', { colspan:String(cols.length-2),
-        text: b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '' }));
+        text: (b.market ? b.market + ' · ' : '') + (b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '') }));
       tb.appendChild(tr2);
     });
   }
@@ -2016,7 +2167,8 @@ function buildXlsx(){
       var row = ws.getRow(r0+1+n);
       row.getCell(spCol).value = b.disp;
       row.getCell(base+3).value = E.title((b.origin||'').split('|')[0]);
-      row.getCell(base+6).value = b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '';
+      row.getCell(base+6).value = (b.market ? b.market + ' · ' : '') +
+        (b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '');
       [spCol, base+3, base+6].forEach(function(k){ row.getCell(k).fill = solid(FILL.bench); });
     });
 
@@ -2082,7 +2234,8 @@ function buildXlsx(){
 
     return wb.xlsx.writeBuffer().then(function(buf){
       var d = new Date(), pad = function(n){ return String(n).padStart(2,'0'); };
-      var marketTag = state.market === 'DC Metro' ? '' : ('_' + state.market.replace(/\s+/g,''));
+      var marketTag = state.market === 'DC Metro' ? '' :
+        state.market === 'ALL' ? '_AllMarkets' : ('_' + state.market.replace(/\s+/g,''));
       var fn = pad(d.getMonth()+1) + '_' + pad(d.getDate()) + '_' + state.slot + marketTag + '_LEADS_ASSIGNED.xlsx';
       var blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       var url = URL.createObjectURL(blob);

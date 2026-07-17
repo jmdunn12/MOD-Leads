@@ -813,6 +813,88 @@ function runAll(E){
     ok('a bath board would be empty here', r.bathRows.length === 0);
     ok('no wrong-team warnings for a clean DC run', r.wrongTeamField.length === 0);
   })();
+
+  // =====================================================================
+  //                ALL-MARKETS MODE (one page, one run)
+  // =====================================================================
+
+  group('All-markets: each market\'s leads go to its own crew');
+  (function(){
+    var titus = rep('titus smith','bowie|md');            titus.rank.team = 'Beta';
+    var erin = rep('erin eissens','hampton|va');          erin.rank.team = 'Gamma-VAB';
+    var mercer = rep('christopher mercer','richmond|va'); mercer.rank.team = 'Gamma-RVA';
+    var rank = {}, d60 = {}, homes = {};
+    [titus, erin, mercer].forEach(function(x){
+      rank[x.name] = x.rank; homes[x.name] = x.home;
+      d60[x.name] = { nsli:9000, close:32, issued:40, vol:360000 };
+    });
+    var leads = [
+      mkLead({ 'Customer Name':'DC Lead', 'City':'Bowie', 'State':'MD', 'Market':'DC Metro' }),
+      mkLead({ 'Customer Name':'HR Lead', 'City':'Norfolk', 'State':'VA', 'Market':'Hampton Roads' }),
+      mkLead({ 'Customer Name':'RVA Lead', 'City':'Henrico', 'State':'VA', 'Market':'Richmond' }),
+      mkLead({ 'Customer Name':'Mystery', 'City':'Bowie', 'State':'MD', 'Market':'Atlantis' })
+    ];
+    leads.forEach(function(l, i){ l._row = i + 2; });
+    var r = E.runAllMarkets({
+      slot:'AM', leads:leads,
+      rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':['erin eissens'], 'Richmond':['christopher mercer'] },
+      bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{}
+    });
+    eq('three assignments across three markets', r.counts.assigned, 3);
+    var byCust = {}; r.rows.forEach(function(x){ byCust[x.lead['Customer Name']] = x; });
+    eq('DC lead → DC rep', byCust['DC Lead'].rep.c, 'titus smith');
+    eq('HR lead → HR rep', byCust['HR Lead'].rep.c, 'erin eissens');
+    eq('RVA lead → RVA rep', byCust['RVA Lead'].rep.c, 'christopher mercer');
+    eq('rows tagged with their market', byCust['HR Lead'].market, 'Hampton Roads');
+    eq('unknown-market lead counted once as market skip', r.skips.market, 1);
+    ok('result flagged as all-markets', r.isAll === true);
+    eq('no cross-market triple-counting of skips', r.counts.skipped, 1);
+  })();
+
+  group('All-markets: shared Kappa pool is never double-booked');
+  (function(){
+    var kerr = rep('malcolm kerr','washington|dc'); kerr.rank.team = 'Kappa';
+    kerr.rank.Bath = { leads:25, nsli:8000, close:30 };
+    var rank = { 'malcolm kerr':kerr.rank }, homes = { 'malcolm kerr':kerr.home };
+    var d60 = { 'malcolm kerr':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    // Two bath leads in different markets, both reachable from the single Kappa rep's home.
+    var leads = [
+      mkLead({ 'Customer Name':'DC Bath', 'Product':'BATHSYSTEM', 'City':'Bowie', 'State':'MD', 'Market':'DC Metro' }),
+      mkLead({ 'Customer Name':'RVA Bath', 'Product':'BATHSYSTEM', 'City':'Bowie', 'State':'MD', 'Market':'Richmond' })
+    ];
+    leads.forEach(function(l, i){ l._row = i + 2; });
+    var r = E.runAllMarkets({
+      slot:'AM', leads:leads,
+      rosters:{ 'DC Metro':[], 'Hampton Roads':[], 'Richmond':[] },
+      bathRoster:['malcolm kerr'], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{}
+    });
+    eq('both bath leads reach the bath board', r.bathRows.length, 2);
+    var assigned = r.bathRows.filter(function(x){ return x.rep; });
+    eq('the single Kappa rep is used exactly once', assigned.length, 1);
+    eq('…on the earlier market\'s lead (DC runs first)', assigned[0].lead['Customer Name'], 'DC Bath');
+    ok('the second bath lead is unfilled, not double-booked',
+      r.bathRows.some(function(x){ return !x.rep && x.lead['Customer Name'] === 'RVA Bath'; }));
+    eq('bath bench is empty (the one Kappa rep worked)', r.counts.bathBench, 0);
+  })();
+
+  group('All-markets: per-market caps still apply');
+  (function(){
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var rank = { 'titus smith':titus.rank }, homes = { 'titus smith':titus.home };
+    var d60 = { 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    var leads = [ mkLead({ 'Customer Name':'Frederick lead', 'City':'Frederick', 'State':'MD', 'Market':'DC Metro' }) ];
+    leads[0]._row = 2;
+    function go(ceilBy){
+      return E.runAllMarkets({ slot:'AM', leads:leads,
+        rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':[] },
+        bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+        geo:null, aliases:null, prodMap:null, manualPins:{}, ceilBy:ceilBy });
+    }
+    ok('default cap: Frederick assigns', go(null).rows[0].rep !== null);
+    eq('60-min DC cap: Frederick unfilled', go({ 'DC Metro':60 }).rows[0].rep, null);
+  })();
 }
 </script>
 </body>
