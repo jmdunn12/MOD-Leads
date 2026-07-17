@@ -44,7 +44,7 @@ When you pick a market:
 
 ### How bath leads flow
 
-Bath leads (`Product = BATHSYSTEM`) come off the field board automatically and land on a separate **Bath Board** section:
+Any lead with a bath component — pure `BATHSYSTEM` **or a bath combo** like `COMBO_BATH_WIN_DOR` — comes off the field board automatically and lands on a separate **Bath Board** section:
 
 1. **Kappa first** — bath leads fill from your checked Kappa reps.
 2. **Field overflow** — if there are more bath leads than Kappa can cover, the extras go to reps who ended up on the field bench, ranked by their **bath** score. Those overflow reps disappear from the field bench so nobody's double-booked.

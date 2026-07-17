@@ -439,13 +439,19 @@ function runAll(E){
     ok('BIG + few issued → verify flag',
       r3.rows[0].flags.some(function(f){ return /limited 60-day volume \(4 issued\)/.test(f); }), JSON.stringify(r3.rows[0].flags));
 
-    // bath combo — Bath now scores (col 99 in v3.0.9), so combos INCLUDE it and the old
-    // "contains bath component — scored on windows/doors" flag has been retired.
-    var r4 = E.run(mkInput([mkLead({ 'Product':'COMBO_BATH_WIN_DOR', 'Notes':'6 windows 1 fed', 'City':'Bowie' })], [rep('titus smith','bowie')]));
-    ok('bath combo stays on the field board (not a pure BATHSYSTEM lead)', r4.rows.length === 1);
-    eq('bath combo now scored on Bath + Windows + Doors', r4.rows[0].detail.comps, ['Bath','Windows','Doors']);
-    ok('the old "scored on windows/doors" flag is gone',
-      r4.rows[0].flags.every(function(f){ return !/scored on windows\/doors/.test(f); }));
+    // bath combo — RULE (2026-07-17): any product containing BATH routes to the bath
+    // board (Kappa crew), even when other components are on the job.
+    var kerr = rep('malcolm kerr','washington|dc'); kerr.rank.team = 'Kappa';
+    kerr.rank.Bath = { leads:25, nsli:8000, close:30 };
+    var r4 = E.run(mkInput([mkLead({ 'Product':'COMBO_BATH_WIN_DOR', 'Notes':'6 windows 1 fed', 'City':'Bowie' })],
+      [rep('titus smith','bowie')], { bathReps:[kerr] }));
+    eq('bath combo leaves the field board entirely', r4.rows.length, 0);
+    eq('bath combo lands on the bath board', r4.bathRows.length, 1);
+    eq('and goes to the Kappa rep, not the field rep', r4.bathRows[0].rep.c, 'malcolm kerr');
+    eq('scored on the full component list (Bath + Windows + Doors)',
+      r4.bathRows[0].detail.comps, ['Bath','Windows','Doors']);
+    ok('field rep stays on the field bench (no overflow needed)',
+      r4.bench.some(function(b){ return b.c === 'titus smith'; }));
 
     // unknown product
     var r5 = E.run(mkInput([mkLead({ 'Product':'COMBO_NEW_THING', 'City':'Bowie' })], [rep('titus smith','bowie')]));
@@ -652,6 +658,19 @@ function runAll(E){
     eq('bath lead went to Kappa, not field', r.bathRows[0].rep.c, 'malcolm kerr');
     ok('bath overflow was not used', r.overflowUsed === false);
     eq('field board rep is Titus', r.rows[0].rep.c, 'titus smith');
+  })();
+
+  group('Bath combos route to Kappa (rule 2026-07-17)');
+  (function(){
+    ['BATHSYSTEM','COMBO_BATH_WIN_DOR','COMBO_BATH_W_D_G_S','COMBO_BATH_GUTTER'].forEach(function(code){
+      eq(code + ' classifies as bath', E.classifySkip(mkLead({ 'Product':code }), 'DC Metro'), 'bath');
+    });
+    eq('non-bath combo does NOT route to bath', E.classifySkip(mkLead({ 'Product':'COMBO_WIND_DOOR' }), 'DC Metro'), null);
+    // cancelled/open/campaign still win over bath routing
+    eq('cancelled beats bath routing',
+      E.classifySkip(mkLead({ 'Product':'BATHSYSTEM', 'Service Provider':'James Dunn' }), 'DC Metro'), 'cancelled');
+    eq('open status beats bath routing',
+      E.classifySkip(mkLead({ 'Product':'COMBO_BATH_WIN_DOR', 'Status':'Open' }), 'DC Metro'), 'open');
   })();
 
   group('Kappa never on any field board');

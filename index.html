@@ -413,6 +413,7 @@ var DEFAULT_GEO = {
   'north potomac|md':[39.0954,-77.2480],'pikesville|md':[39.3743,-76.7252],'randallstown|md':[39.3673,-76.7950],
   'ashburn|va':[39.0437,-77.4875],'cockeysville|md':[39.4812,-76.6427],'hillsboro|va':[39.2065,-77.7252],
   'hughesville|md':[38.5318,-76.7886],'jeffersonton|va':[38.6385,-77.8800],'lorton|va':[38.7043,-77.2278],
+  'glenwood|md':[39.2793,-77.0164],'landover|md':[38.9340,-76.8966],'towson|md':[39.4015,-76.6019],
   // DC-Metro rep home cities
   'pasadena|md':[39.1071,-76.5694],'annapolis|md':[38.9784,-76.4922],'woodbine|md':[39.3362,-77.0639],
   'riva|md':[38.9568,-76.5808],'fairfax|va':[38.8462,-77.3064],'laurel|md':[39.0993,-76.8483],
@@ -720,7 +721,9 @@ function classifySkip(lead, market){
   if(SKIP_CAMPAIGN.indexOf(low(lead['Campaign'])) >= 0) return 'campaign';
   var wanted = low(market || 'dc metro');
   if(low(lead['Market']) !== wanted) return 'market';
-  if(String(lead['Product']||'').trim().toUpperCase() === 'BATHSYSTEM') return 'bath';   // route, don't drop
+  // Anything with a bath component — pure BATHSYSTEM or a COMBO_BATH_* — belongs to
+  // the Kappa crew, so it routes to the bath board (rule change 2026-07-17).
+  if(String(lead['Product']||'').trim().toUpperCase().indexOf('BATH') >= 0) return 'bath';
   return null;
 }
 
@@ -960,7 +963,8 @@ function run(input){
   var bathOpenIdx = bathLeadIdx.filter(function(i){ return !pins[i]; });
   var bathRes = {};
   function bathScore(rep, d){
-    var bv = S.baseVal(rep.c, ['Bath']);
+    // comps is ['Bath'] for pure BATHSYSTEM, or Bath + the other components for combos
+    var bv = S.baseVal(rep.c, d.comps);
     var dm = driveTo(rep.origin, d.city, d.stateAbbr);
     return { bv:bv, dm:dm };
   }
@@ -983,7 +987,7 @@ function run(input){
       var b = rowToCol[a];
       if(b >= 0 && M[a][b] > -1e8){
         var rep = poolArr[b];
-        bathRes[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, ['Bath']), overflow:overflow };
+        bathRes[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, L[i].comps), overflow:overflow };
         usedIdx.push(b);
       }
     });
@@ -1056,7 +1060,7 @@ function run(input){
     var d = L[i], c = pins[i].rep;
     var rep = combinedAvail.filter(function(a){ return a.c === c; })[0];
     var dm = rep ? driveTo(rep.origin, d.city, d.stateAbbr) : null;
-    var bv = rep ? S.baseVal(c, d.isBathLead ? ['Bath'] : d.comps) : null;
+    var bv = rep ? S.baseVal(c, d.comps) : null;   // comps already includes Bath for bath leads
     var repTeam = rep && input.rank[c] ? input.rank[c].team : null;
     var isBathRep = repTeam === BATH_TEAM;
     var row = { i:i, lead:leads[i], tier:d.tier, opp:opportunity(d), detail:d,
@@ -1080,7 +1084,7 @@ function run(input){
       rep:null, origin:null, drive:null, eff:null, flags:[], state:'', pinned:false,
       board:'bath', overflow:false };
     if(r){
-      var fr = flagsFor(r.rep, r.drive, { tier:d.tier, comps:['Bath'] });
+      var fr = flagsFor(r.rep, r.drive, { tier:d.tier, comps:d.comps });
       row.rep = r.rep; row.origin = originDisp(r.rep.origin); row.drive = Math.round(r.drive);
       row.eff = Math.round(r.eff); row.flags = fr.flags;
       row.overflow = r.overflow;
