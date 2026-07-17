@@ -14,7 +14,2230 @@
   --big:#e2efda; --warn:#fff2cc; --bad:#f8cbad; --pin:#d9e1f2; --bench:#f2f2f2;
   --big-line:#7fae63; --warn-line:#d8b34a; --bad-line:#d1795a; --pin-line:#7f9ac4;
   --radius:6px; --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lead Assignment Engine</title>
+<!-- SheetJS reads (tolerates chartsheets, which ExcelJS hangs on); ExcelJS writes (cell styling). -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#12161c; --muted:#5c6773; --line:#dde2e8;
+  --accent:#1f4e78; --accent-ink:#fff;
+  --big:#e2efda; --warn:#fff2cc; --bad:#f8cbad; --pin:#d9e1f2; --bench:#f2f2f2;
+  --big-line:#7fae63; --warn-line:#d8b34a; --bad-line:#d1795a; --pin-line:#7f9ac4;
+  --radius:6px; --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#11151a; --panel:#171c23; --ink:#e6ebf1; --muted:#93a0ad; --line:#2b333d;
+    --accent:#2f6da3; --accent-ink:#fff;
+    --big:#1e3320; --warn:#3a3117; --bad:#3d2118; --pin:#1b2a3f; --bench:#1c2128;
+    --big-line:#4d7a3a; --warn-line:#8a7327; --bad-line:#8b4a34; --pin-line:#3f5f8f;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-text-size-adjust:100%}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+h1{font-size:16px}
+h2{font-size:14px}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header.top{position:sticky;top:0;z-index:30;background:var(--accent);color:var(--accent-ink);
+  padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header.top .sub{font-size:12px;opacity:.8}
+header.top .spacer{flex:1}
+
+main{max-width:1500px;margin:0 auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.panel>.head{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel>.head .spacer{flex:1}
+.panel>.body{padding:12px;display:flex;flex-direction:column;gap:12px}
+.panel.collapsed>.body{display:none}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.grow{flex:1;min-width:220px}
+
+button{font:inherit;font-weight:600;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:8px 12px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:disabled{opacity:.5;cursor:not-allowed}
+button.sm{padding:5px 9px;min-height:30px;font-size:12px;font-weight:500}
+button.danger{color:#b4341c;border-color:#b4341c40}
+
+input[type=text],input[type=number],select,textarea{font:inherit;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:7px 8px;min-height:36px;width:100%}
+textarea{min-height:90px;font-family:var(--mono);font-size:12px}
+label.lbl{font-size:12px;color:var(--muted);font-weight:600}
+
+.slots{display:flex;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;width:max-content}
+.slots button{border:0;border-right:1px solid var(--line);border-radius:0;min-width:74px;background:transparent}
+.slots button:last-child{border-right:0}
+.slots button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+
+.drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:12px;display:flex;gap:10px;
+  align-items:center;flex-wrap:wrap;cursor:pointer;background:transparent}
+.drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.drop .name{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all}
+.drop input[type=file]{display:none}
+
+.chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:11px;
+  font-weight:600;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.chip.ok{border-color:var(--big-line);background:var(--big)}
+.chip.no{border-color:var(--bad-line);background:var(--bad)}
+.chip.warn{border-color:var(--warn-line);background:var(--warn)}
+
+.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px}
+.reps label{display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:4px;cursor:pointer;min-height:38px}
+.reps label:hover{background:var(--bench)}
+.reps input{width:17px;height:17px;flex:none;accent-color:var(--accent)}
+.reps .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reps .hm{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
+
+.tablewrap{overflow:auto;max-height:70vh;border-top:1px solid var(--line)}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+th{position:sticky;top:0;z-index:2;background:var(--accent);color:var(--accent-ink);font-size:11px;
+  text-transform:uppercase;letter-spacing:.05em;cursor:pointer;white-space:nowrap}
+th[aria-sort=ascending]::after{content:" \2191"}
+th[aria-sort=descending]::after{content:" \2193"}
+td.num{font-family:var(--mono);text-align:right}
+td.flags{white-space:normal;min-width:220px;font-size:12px;color:var(--muted)}
+tr.big td{background:var(--big)}
+tr.warn td{background:var(--warn)}
+tr.bad td{background:var(--bad)}
+tr.pin td{background:var(--pin)}
+tr.bench td{background:var(--bench);color:var(--muted)}
+td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:170px}
+
+.summary{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.stat{display:flex;flex-direction:column;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius);min-width:78px}
+.stat b{font-family:var(--mono);font-size:17px;line-height:1.1}
+.stat span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+
+.notice{padding:9px 11px;border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius);font-size:13px}
+.notice.warn{border-left-color:var(--warn-line);background:var(--warn)}
+.notice.bad{border-left-color:var(--bad-line);background:var(--bad)}
+.notice.info{border-left-color:var(--accent)}
+.notice ul{margin:5px 0 0;padding-left:18px}
+
+.kv{display:grid;grid-template-columns:auto 1fr auto;gap:6px 8px;align-items:center;font-size:13px}
+.kv .k{font-family:var(--mono);font-size:12px}
+.mono{font-family:var(--mono);font-size:12px}
+.muted{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.scroll{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:8px}
+@media(max-width:640px){
+  main{padding:8px;gap:8px}
+  .panel>.body{padding:10px}
+  th,td{padding:6px 7px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Lead Assignment Engine</h1>
+  <span class="sub">DC Metro &middot; runs entirely in your browser</span>
+  <span class="spacer"></span>
+  <span id="refState" class="chip">reference data: checking…</span>
+</header>
+
+<main>
+
+<!-- ============ SETUP (collapsible) ============ -->
+<section class="panel collapsed" id="setupPanel">
+  <div class="head">
+    <h2>Setup &amp; reference data</h2>
+    <span class="muted" id="setupHint">uploaded once — not every shift</span>
+    <span class="spacer"></span>
+    <button class="sm" id="setupToggle" aria-expanded="false">Open</button>
+  </div>
+  <div class="body">
+
+    <div class="row">
+      <div class="col grow">
+        <label class="lbl">Power ranking (2-week per-product)</label>
+        <label class="drop" data-drop="rank">
+          <input type="file" accept=".xlsx" data-file="rank">
+          <span class="chip" id="chip-rank">none</span>
+          <span class="name" id="name-rank">Rep_Performance_By_Product…xlsx</span>
+        </label>
+      </div>
+      <div class="col grow">
+        <label class="lbl">60-day Sales Efficiency</label>
+        <label class="drop" data-drop="d60">
+          <input type="file" accept=".xlsx" data-file="d60">
+          <span class="chip" id="chip-d60">none</span>
+          <span class="name" id="name-d60">Sales_Efficiency.xlsx</span>
+        </label>
+      </div>
+      <div class="col grow">
+        <label class="lbl">Rep phone / home list</label>
+        <label class="drop" data-drop="homes">
+          <input type="file" accept=".xlsx" data-file="homes">
+          <span class="chip" id="chip-homes">none</span>
+          <span class="name" id="name-homes">Copy_of_Rep_Phone_List.xlsx</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="sm" id="btnGeo">City coordinates (<span id="geoCount">0</span>)</button>
+      <button class="sm" id="btnHomeOv">Home overrides (<span id="hoCount">0</span>)</button>
+      <button class="sm" id="btnAlias">Name aliases (<span id="aliasCount">0</span>)</button>
+      <button class="sm" id="btnProd">Product mappings (<span id="prodCount">0</span>)</button>
+      <button class="sm" id="btnCaps">Per-market caps</button>
+      <span class="spacer"></span>
+      <button class="sm" id="btnExport">Back up settings (.json)</button>
+      <button class="sm" id="btnImport">Restore settings</button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+      <button class="sm danger" id="btnWipe">Clear all saved data</button>
+    </div>
+
+    <div id="editorHost"></div>
+  </div>
+</section>
+
+<!-- ============ SHIFT ============ -->
+<section class="panel" id="shiftPanel">
+  <div class="head"><h2>This shift</h2></div>
+  <div class="body">
+
+    <div class="row">
+      <div class="col">
+        <label class="lbl">Market</label>
+        <div class="slots" id="markets" role="group" aria-label="Market">
+          <button data-market="DC Metro" aria-pressed="true">DC Metro</button>
+          <button data-market="Hampton Roads" aria-pressed="false">Hampton Roads</button>
+          <button data-market="Richmond" aria-pressed="false">Richmond</button>
+        </div>
+      </div>
+      <div class="col">
+        <label class="lbl">Slot</label>
+        <div class="slots" id="slots" role="group" aria-label="Shift slot">
+          <button data-slot="AM" aria-pressed="true">AM</button>
+          <button data-slot="PM" aria-pressed="false">PM</button>
+          <button data-slot="EVE" aria-pressed="false">EVE</button>
+        </div>
+      </div>
+      <div class="col grow">
+        <label class="lbl">Lead sheet for this slot (SAP export)</label>
+        <label class="drop" data-drop="leads">
+          <input type="file" accept=".xlsx" data-file="leads">
+          <span class="chip" id="chip-leads">none</span>
+          <span class="name" id="name-leads">drop the .xlsx here, or tap to pick</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row" id="priorRow" hidden>
+      <div class="col grow">
+        <label class="lbl">Prior board(s) — for drive chaining <span class="muted" id="priorHint"></span></label>
+        <label class="drop" data-drop="prior">
+          <input type="file" accept=".xlsx" multiple data-file="prior">
+          <span class="chip" id="chip-prior">none</span>
+          <span class="name" id="name-prior">AM board (and PM board for EVE) — most recent last</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="row" style="align-items:center">
+        <label class="lbl">Field reps — <span id="marketLabel">DC Metro</span> <span id="rosterCount" class="mono"></span></label>
+        <span class="spacer"></span>
+        <select id="presetSel" style="width:auto;min-width:170px"><option value="">Roster presets…</option></select>
+        <button class="sm" id="presetSave">Save current</button>
+        <button class="sm" id="presetDel">Delete</button>
+        <button class="sm" id="rosterNone">Clear</button>
+      </div>
+      <div class="reps" id="reps"><span class="muted">Upload the reference files above to build the rep list.</span></div>
+    </div>
+
+    <div class="col">
+      <div class="row" style="align-items:center">
+        <label class="lbl">Bath crew (Kappa) <span id="bathRosterCount" class="mono"></span></label>
+        <span class="muted" style="font-size:12px">only used when bath leads are on the sheet</span>
+      </div>
+      <div class="reps" id="bathReps"><span class="muted">—</span></div>
+    </div>
+
+    <div class="row" style="align-items:center">
+      <button class="primary" id="runBtn" disabled>Run assignment</button>
+      <span id="runMsg" class="muted"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ UNKNOWN CITIES ============ -->
+<section class="panel" id="geoPanel" hidden>
+  <div class="head"><h2>Unknown cities</h2><span class="muted">a lead or rep origin has no coordinates — these can't be assigned until you add them</span></div>
+  <div class="body"><div id="geoForm"></div></div>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section class="panel" id="resultPanel" hidden>
+  <div class="head">
+    <h2>Board</h2>
+    <span class="spacer"></span>
+    <button class="sm" id="btnRerun">Re-run with pins</button>
+    <button class="primary" id="btnXlsx">Download .xlsx</button>
+  </div>
+  <div class="body" style="padding-bottom:0">
+    <div class="summary" id="summary"></div>
+    <div id="flagBox"></div>
+  </div>
+  <div class="tablewrap"><table id="board"><thead></thead><tbody></tbody></table></div>
+</section>
+
+<p class="muted" style="max-width:1500px;margin:0 auto;padding:0 14px 24px;font-size:12px">
+  Drive times are estimated (straight-line &times;1.3 at 35&nbsp;mph), not live routing. Nothing you upload leaves this browser.
+  <a href="tests.html">Run the test suite</a>.
+</p>
+</main>
+
+<!-- ================================================================
+     ENGINE — pure logic, no DOM. Ported from lead_engine.py.
+     tests.html loads this same block. Keep it dependency-free.
+     ================================================================ -->
+<script id="engine">
+(function (global) {
+'use strict';
+
+// ---- tuning knobs (keep in sync with lead_engine.py) ----
+var CONST = { K:12, K2:8, VOL_ADD:10000, DRIVE_PEN:40 };
+
+// per-market defaults (override in settings)
+var DEFAULT_FLOOR = { 'DC Metro':5000, 'Hampton Roads':5000, 'Richmond':5000 };
+var DEFAULT_CEIL  = { 'DC Metro':120,  'Hampton Roads':120,  'Richmond':120  };
+
+// Team column (col 2 of the power ranking) drives crew membership.
+var MARKETS = ['DC Metro', 'Hampton Roads', 'Richmond'];
+var TEAMS_BY_MARKET = {
+  'DC Metro':      ['Beta', 'Delta'],
+  'Hampton Roads': ['Gamma-VAB'],
+  'Richmond':      ['Gamma-RVA']
+};
+var BATH_TEAM = 'Kappa';   // strictly bath crew — never on any field board
+
+var CANCEL_REP  = 'james dunn';
+var SKIP_STATUS = ['open'];
+var SKIP_CAMPAIGN = ['install consultant'];
+
+// Per-market exclusions. Old flat BOTTOM_EXCLUDE was miscategorized: raymond
+// hieronimus (Kappa), stephanie poteet (Gamma-VAB), and neil waranch (Gamma-VAB)
+// looked like bottom producers only because those markets were filtered out.
+var DEFAULT_BOTTOM_EXCLUDE = {
+  'DC Metro':      ['david golladay', 'gary halford'],
+  'Hampton Roads': [],
+  'Richmond':      [],
+  'Bath':          []
+};
+// Flat list retained for existing tests + backwards-compat lookups.
+var BOTTOM_EXCLUDE = ['david golladay','gary halford','raymond hieronimus','stephanie poteet','neil waranch'];
+
+var DEFAULT_ALIASES = {
+  'al kowalski':'wojciech kowalski','aj doroci':'ajet doroci','ben sands':'benjamin sands',
+  'ray wander':'raymond wander','frank hill':'franklin hill',
+  'mary beth heller':'mary-beth heller','marybeth heller':'mary-beth heller',
+  'nick wittman':'nicholas wittman','jeff kaelin':'jeffrey kaelin',
+  'jp feeney':'john-paul feeney','john paul feeney':'john-paul feeney','johnpaul feeney':'john-paul feeney',
+  'josh brown':'joshua brown','josh b':'joshua brown',
+  'chris mercer':'christopher mercer','sam ludwig':'samantha ludwig',
+  'steve forss':'steven forss','jaems archy':'james archy',
+  'zach diffenderfer':'zachary diffenderfer','zach diff':'zachary diffenderfer',
+  'hunter w':'hunter willson','jacob s':'jacob szczepanik',
+  'stepehn bryan':'stephen bryan','titus smtih':'titus smith'
+};
+
+var DEFAULT_HOME_OVERRIDES = {
+  'jacob szczepanik':   'crofton|md',
+  'samantha ludwig':    'virginia beach|va',
+  'steven forss':       'virginia beach|va',
+  'christopher mercer': 'richmond|va'
+};
+
+// Geocodes are keyed 'city|state'. State-alone city lookup falls back to any state
+// (and warns), so a lead in "Mechanicsville, VA" cannot silently match Mechanicsville, MD.
+var DEFAULT_GEO = {
+  // ------- DC Metro (MD / DC / VA) -------
+  'washington|dc':[38.9072,-77.0369],'baltimore|md':[39.2904,-76.6122],'silver spring|md':[38.9907,-77.0261],
+  'rockville|md':[39.0840,-77.1528],'ellicott city|md':[39.2673,-76.7983],'bethesda|md':[38.9847,-77.0947],
+  'upper marlboro|md':[38.8157,-76.7497],'sykesville|md':[39.3737,-76.9686],'reisterstown|md':[39.4690,-76.8294],
+  'bowie|md':[38.9427,-76.7302],'boyds|md':[39.2143,-77.3216],'olney|md':[39.1532,-77.0669],'odenton|md':[39.0840,-76.7000],
+  'waldorf|md':[38.6246,-76.9300],'temple hills|md':[38.8126,-76.9400],'gaithersburg|md':[39.1434,-77.2014],
+  'lanham|md':[38.9676,-76.8636],'frederick|md':[39.4143,-77.4105],'owings mills|md':[39.4196,-76.7802],
+  'clinton|md':[38.7651,-76.8983],'germantown|md':[39.1732,-77.2700],'alexandria|va':[38.8048,-77.0469],
+  'winchester|va':[39.1857,-78.1633],'fairfax station|va':[38.8043,-77.3203],'district heights|md':[38.8576,-76.8894],
+  'fort washington|md':[38.7099,-77.0300],'university park|md':[38.9701,-76.9447],'manassas|va':[38.7509,-77.4753],
+  'accokeek|md':[38.6671,-76.9886],'davidsonville|md':[38.9290,-76.6308],'deale|md':[38.7793,-76.5494],
+  'westminster|md':[39.5754,-76.9958],'potomac|md':[39.0182,-77.2086],'derwood|md':[39.1287,-77.1539],
+  'falls church|va':[38.8823,-77.1711],'millersville|md':[39.0626,-76.6299],'thurmont|md':[39.6237,-77.4111],
+  'clifton|va':[38.7807,-77.3866],'columbia|md':[39.2037,-76.8610],'centreville|va':[38.8401,-77.4291],
+  'leesburg|va':[39.1157,-77.5636],'great mills|md':[38.2604,-76.4969],'gwynn oak|md':[39.3287,-76.7305],
+  'hollywood|md':[38.3393,-76.5566],'upper falls|md':[39.4015,-76.4133],'vienna|va':[38.9012,-77.2653],
+  'chevy chase|md':[38.9682,-77.0728],'chevrolet|md':[38.9682,-77.0728],
+  'severna park|md':[39.0743,-76.5500],'herndon|va':[38.9696,-77.3861],'owings|md':[38.6900,-76.6100],
+  'bel air|md':[39.5359,-76.3500],
+  'annandale|va':[38.8304,-77.1964],'college park|md':[38.9807,-76.9369],'elkridge|md':[39.2126,-76.7136],
+  'fulton|md':[39.1526,-76.9230],'gainesville|va':[38.7959,-77.6147],'king george|va':[38.2682,-77.1839],
+  'lexington park|md':[38.2668,-76.4527],'woodbridge|va':[38.6582,-77.2497],
+  'brunswick|md':[39.3140,-77.6249],'finksburg|md':[39.4940,-76.8800],'great falls|va':[38.9979,-77.2880],
+  'hagerstown|md':[39.6418,-77.7200],'windsor mill|md':[39.3334,-76.7800],
+  'brandywine|md':[38.6976,-76.8483],'ijamsville|md':[39.3132,-77.3589],'lake frederick|va':[39.0501,-78.1300],
+  'mount airy|md':[39.3762,-77.1547],'suitland|md':[38.8487,-76.9197],
+  'catonsville|md':[39.2720,-76.7319],'clarksville|md':[39.2037,-76.9469],'keedysville|md':[39.4862,-77.6961],
+  'locust grove|va':[38.3457,-77.7600],'alexandria city|va':[38.8048,-77.0469],'catlett|va':[38.6543,-77.6386],
+  'chantilly|va':[38.8943,-77.4311],'glen burnie|md':[39.1626,-76.6247],'haymarket|va':[38.8124,-77.6361],
+  'stafford|va':[38.4221,-77.4083],
+  'halethorpe|md':[39.2293,-76.6705],'lutherville timonium|md':[39.4243,-76.6190],'timonium|md':[39.4385,-76.6094],
+  'sterling|va':[39.0062,-77.4286],
+  'ashton|md':[39.1532,-77.0030],'brookeville|md':[39.1840,-77.0586],'clarksburg|md':[39.2380,-77.2786],
+  'graysonville|md':[38.9460,-76.2107],
+  'damascus|md':[39.2887,-77.2036],'mc lean|va':[38.9339,-77.1773],'mclean|va':[38.9339,-77.1773],
+  'mechanicsville|md':[38.4438,-76.7383],
+  'montgomery village|md':[39.1768,-77.1953],'rosedale|md':[39.3243,-76.5097],'sparrows point|md':[39.2230,-76.4358],
+  'cheverly|md':[38.9290,-76.9158],'saint leonard|md':[38.4757,-76.5125],'seat pleasant|md':[38.8968,-76.9047],
+  'warrenton|va':[38.7135,-77.7950],'crofton|md':[39.0007,-76.6850],
+  'hanover|md':[39.1888,-76.7236],'oakton|va':[38.8810,-77.3000],
+  'parkton|md':[39.6204,-76.6597],'takoma park|md':[38.9779,-77.0075],
+  'burke|va':[38.7934,-77.2717],'essex|md':[39.3093,-76.4750],'gambrills|md':[39.0857,-76.6622],'gambrels|md':[39.0857,-76.6622],
+  'new windsor|md':[39.5417,-77.1067],'queenstown|md':[38.9982,-76.1597],'woodsboro|md':[39.5337,-77.3175],
+  'forest hill|md':[39.5840,-76.3950],'severn|md':[39.1372,-76.6983],'broadlands|va':[39.0157,-77.5347],
+  'aldie|va':[38.9719,-77.6403],'havre de grace|md':[39.5495,-76.0902],'lovettsville|va':[39.2735,-77.6386],
+  'stephenson|va':[39.2196,-78.0000],
+  'capitol heights|md':[38.8851,-76.9136],'reston|va':[38.9586,-77.3570],
+  'leonardtown|md':[38.2904,-76.6355],'baldwin|md':[39.5093,-76.4919],'white plains|md':[38.5893,-76.9789],
+  'abingdon|md':[39.4668,-76.2986],'brambleton|va':[38.9821,-77.5389],'hampstead|md':[39.6046,-76.8497],
+  'huntingtown|md':[38.6193,-76.6383],'nottingham|md':[39.3743,-76.4358],
+  'bealeton|va':[38.5738,-77.7708],'edgewood|md':[39.4187,-76.2944],'round hill|va':[39.1362,-77.7597],
+  'boonsboro|md':[39.5074,-77.6522],'bristow|va':[38.7573,-77.5397],'front royal|va':[38.9187,-78.1944],
+  'aberdeen|md':[39.5096,-76.1641],'dundalk|md':[39.2507,-76.5205],'linthicum heights|md':[39.2054,-76.6525],
+  'trappe|md':[38.6579,-76.0577],
+  'nokesville|va':[38.6987,-77.5786],'belcamp|md':[39.4726,-76.2436],'churchville|md':[39.5640,-76.2483],
+  'la plata|md':[38.5293,-76.9753],'manchester|md':[39.6612,-76.8850],'union bridge|md':[39.5690,-77.1772],
+  'edgewater|md':[38.9568,-76.5494],'grasonville|md':[38.9460,-76.2107],'kensington|md':[39.0259,-77.0764],
+  'north potomac|md':[39.0954,-77.2480],'pikesville|md':[39.3743,-76.7252],'randallstown|md':[39.3673,-76.7950],
+  'ashburn|va':[39.0437,-77.4875],'cockeysville|md':[39.4812,-76.6427],'hillsboro|va':[39.2065,-77.7252],
+  'hughesville|md':[38.5318,-76.7886],'jeffersonton|va':[38.6385,-77.8800],'lorton|va':[38.7043,-77.2278],
+  // DC-Metro rep home cities
+  'pasadena|md':[39.1071,-76.5694],'annapolis|md':[38.9784,-76.4922],'woodbine|md':[39.3362,-77.0639],
+  'riva|md':[38.9568,-76.5808],'fairfax|va':[38.8462,-77.3064],'laurel|md':[39.0993,-76.8483],
+  'beltsville|md':[39.0345,-76.9075],'middle river|md':[39.3343,-76.4391],'greenbelt|md':[38.9959,-76.8755],
+  'springfield|va':[38.7893,-77.1872],'crownsville|md':[39.0285,-76.6041],'stevensville|md':[38.9818,-76.3314],
+  'hyattsville|md':[38.9559,-76.9456],'chesapeake beach|md':[38.6857,-76.5336],'parkville|md':[39.3784,-76.5394],
+  'arnold|md':[39.0326,-76.5030],'oxon hill|md':[38.8013,-76.9869],'burtonsville|md':[39.1116,-76.9325],
+  'arlington|va':[38.8799,-77.1068],'chester|va':[37.3549,-77.4413],
+
+  // ------- Hampton Roads (VA, plus one NC) -------
+  'virginia beach|va':[36.8529,-75.9780],'chesapeake|va':[36.7682,-76.2875],
+  'hampton|va':[37.0299,-76.3452],'williamsburg|va':[37.2707,-76.7075],
+  'norfolk|va':[36.8508,-76.2859],'suffolk|va':[36.7282,-76.5836],
+  'portsmouth|va':[36.8354,-76.2983],'newport news|va':[37.0871,-76.4730],
+  'toano|va':[37.3821,-76.8083],'yorktown|va':[37.2388,-76.5097],
+  'hayes|va':[37.2921,-76.4661],'elizabeth city|nc':[36.2946,-76.2511],
+  'ivor|va':[36.9068,-77.0917],   // Adam Diaz's home
+
+  // ------- Richmond (VA) -------
+  'henrico|va':[37.5407,-77.3703],'richmond|va':[37.5407,-77.4360],
+  'glen allen|va':[37.6654,-77.5083],'chesterfield|va':[37.3771,-77.5053],
+  'fredericksburg|va':[38.3032,-77.4605],'midlothian|va':[37.5060,-77.6497],
+  'mechanicsville|va':[37.6087,-77.3733],   // <-- regression fix: distinct from mechanicsville|md
+  'north chesterfield|va':[37.4735,-77.5205],
+  'hopewell|va':[37.3043,-77.2872],'petersburg|va':[37.2279,-77.4019],
+  'sandston|va':[37.5185,-77.3169],'disputanta|va':[37.1265,-77.2469],
+  'south chesterfield|va':[37.2704,-77.4155],'sutherland|va':[37.1815,-77.5744],
+  'powhatan|va':[37.5424,-77.9169],'mineral|va':[38.0179,-77.9053],
+  'quinton|va':[37.5188,-77.1447],'orange|va':[38.2454,-78.1108],
+  'gum spring|va':[37.7846,-77.9111],
+  'blackstone|va':[37.0790,-77.9970],   // Paul Woosley's home
+  'upperco|md':[39.5320,-76.7420]       // Bruce Hoosier's home
+};
+
+// city aliases (city-level, before state suffix). Applied on lookup.
+var CITY_ALIASES = {
+  'va beach':'virginia beach'
+};
+
+// Product -> scoring components. Bath is now scorable (col 99 in v3.0.9 ranking),
+// so combos that used to strip Bath now include it.
+var PRODC = {
+  'WINDOWS':['Windows'],'DOORS':['Doors'],'ROOFING':['Roofing'],'SIDING':['Siding'],'GUTTERS':['Gutters'],
+  'BATHSYSTEM':['Bath'],
+  'COMBO_WIND_DOOR':['Windows','Doors'],'COMBO_WIN_DOR_ROOF':['Windows','Doors','Roofing'],
+  'COMBO_S_W_G_D':['Siding','Windows','Gutters','Doors'],'COMBO_WIN_DOOR_GUT':['Windows','Doors','Gutters'],
+  'COMBO_SID_GUT_ROOF':['Siding','Gutters','Roofing'],
+  'COMBO_BATH_WIN_DOR':['Bath','Windows','Doors'],
+  'COMBO_WIN_SID_ROOF':['Windows','Siding','Roofing'],'COMBO_WIN_ROOFING':['Windows','Roofing'],
+  'COMBO_SIDING_WIND':['Windows'],
+  'COMBO_BATH_W_D_G_S':['Bath','Windows','Doors','Gutters','Siding'],
+  'COMBO_BATH_GUTTER':['Bath','Gutters'],
+  'COMBO_SID_WIN_DOOR':['Windows','Doors'],'COMBO_WIND_GUTTER':['Windows'],
+  'COMBO_SIDING_GUTT':['Siding','Gutters'],'COMBO_DOOR_ROOFING':['Doors','Roofing'],
+  'COMBO_S_W_G_D_R':['Siding','Windows','Gutters','Doors','Roofing'],
+  'COMBO_SID_DOOR_GUT':['Siding','Doors','Gutters'],'COMBO_SIDING_DOOR':['Siding','Doors'],
+  'COMBO_GUT_ROOFING':['Gutters','Roofing'],'COMBO_SID_ROOFING':['Siding','Roofing']
+};
+var PRODUCTS = ['Windows','Doors','Siding','Gutters','Roofing','Bath'];
+
+// ---------------- helpers ----------------
+function low(v){ return String(v == null ? '' : v).trim().toLowerCase(); }
+function canon(n, aliases){ var s = low(n); return (aliases && aliases[s]) || DEFAULT_ALIASES[s] || s; }
+function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }); }
+
+// ---------------- notes parsing ----------------
+var WORDNUM = {one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+  eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,twenty:20};
+var NUM = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty)';
+function nn(t){ t = String(t).trim().toLowerCase(); return /^\d+$/.test(t) ? parseInt(t,10) : (WORDNUM[t]||0); }
+function all(re, s){ var out=[], m, r=new RegExp(re.source, re.flags.indexOf('g')<0?re.flags+'g':re.flags);
+  while((m=r.exec(s))!==null){ out.push(m); if(m.index===r.lastIndex) r.lastIndex++; } return out; }
+
+function parseWindows(s){
+  var nums=[], i, m;
+  var rng = all(new RegExp(NUM+'\\s*(?:to|through|-|–)\\s*'+NUM), s);
+  for(i=0;i<rng.length;i++) if(s.indexOf('window')>=0) nums.push(nn(rng[i][1]), nn(rng[i][2]));
+  m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[\\w,-]+){0,2}?[\\s,]+windows?'), s);
+  for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
+  m = all(/(?<!\d)(\d{1,2})\s*windows?/, s);
+  for(i=0;i<m.length;i++) nums.push(parseInt(m[i][1],10));
+  m = all(new RegExp('(?<!\\d)'+NUM+'\\s+win\\b'), s);
+  for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
+  nums = nums.filter(function(x){ return x>0 && x<=40; });
+  var base = nums.length ? Math.max.apply(null, nums) : 0;
+  var bb = 0;
+  m = all(new RegExp('(?<!\\d)'+NUM+'\\s+(?:bow|bay)\\s+windows?'), s);
+  for(i=0;i<m.length;i++) bb = Math.max(bb, nn(m[i][1]));
+  if(bb===0 && /(?:bow|bay)\s+window/.test(s)) bb = 1;
+  var addl = /(?:additional|more|other)\s+windows?/.test(s);
+  var total = (bb && addl) ? base + bb : Math.max(base, bb);
+  return { count: total, known: nums.length>0 || bb>0 };
+}
+
+function parseDoors(str){
+  var s = String(str).replace(/(\d)([a-z])/g, '$1 $2');   // unglue "2storms"
+  function cnt(kw, dflt){
+    if(dflt===undefined) dflt = 1;
+    var ns=[], m, i;
+    m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[\\w,-]+){0,2}?[\\s,]+'+kw), s);
+    for(i=0;i<m.length;i++) ns.push(nn(m[i][1]));
+    m = all(new RegExp('(\\d{1,2})\\s*'+kw), s);
+    for(i=0;i<m.length;i++) ns.push(parseInt(m[i][1],10));
+    ns = ns.filter(function(x){ return x>0 && x<=20; });
+    if(ns.length) return Math.max.apply(null, ns);
+    return new RegExp(kw).test(s) ? dflt : 0;
+  }
+  var front = cnt('(?:fed\\b|front\\s+entry\\s+doors?|front\\s+doors?|entry\\s+doors?)');
+  var m = all(new RegExp('(?<!\\d)'+NUM+'\\s+ed\\b'), s), i;
+  for(i=0;i<m.length;i++) front = Math.max(front, nn(m[i][1]));
+  var storm = cnt('storms?(?:\\s+doors?)?\\b');
+  var slide = cnt('(?:sgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');
+  var generic = cnt('doors?\\b', 0);
+  var types = [];
+  if(front>0) types.push('front');
+  if(storm>0) types.push('storm');
+  if(slide>0) types.push('sliding');
+  var d = Math.max(generic, front+storm+slide);
+  return { count:d, types:types, known:(d>0 || types.length>0) };
+}
+
+function bareNumber(s){
+  var c = all(/(?<![\d/@:.])\b(\d{1,2})\b(?!\s*(?:pm|am|st|nd|rd|th)\b)(?![\d/:])/, s)
+    .map(function(m){ return parseInt(m[1],10); })
+    .filter(function(x){ return x>0 && x<=40; });
+  return c.length ? Math.max.apply(null, c) : 0;
+}
+
+// ---------------- opportunity tier ----------------
+function prodTokens(prod){
+  return String(prod||'').toUpperCase().split('_').filter(function(t){ return t!=='COMBO' && t!=='BATH'; });
+}
+function tierOf(prod, w, wk, d, dtypes, prodMap){
+  var map = prodMap || {};
+  var c = map[prod] || PRODC[prod] || [prod];
+  var pu = String(prod||'').toUpperCase();
+  var tk = prodTokens(prod);
+  var has = function(x){ return c.indexOf(x)>=0; };
+  var inTk = function(x){ return tk.indexOf(x)>=0; };
+  var sid  = has('Siding')  || pu.indexOf('SIDING')>=0  || inTk('S') || inTk('SID');
+  var roof = has('Roofing') || pu.indexOf('ROOF')>=0    || inTk('R');
+  var gut  = has('Gutters') || pu.indexOf('GUTTER')>=0  || inTk('G') || inTk('GUT');
+  var nc = Math.max(c.length, tk.length);
+  var wincombo = pu.indexOf('COMBO')===0 && (pu.indexOf('WIN')>=0 || inTk('W'));
+  if(sid) return 'BIG';
+  if(nc>=3) return 'BIG';
+  if(w>=7) return 'BIG';
+  if(d>=3) return 'BIG';
+  if(w>=5 && d>=2) return 'BIG';
+  if(roof) return 'MEDIUM';
+  if(gut && nc>=2) return 'MEDIUM';
+  if(w===6) return 'MEDIUM';
+  if(d===2) return 'MEDIUM';
+  if(d===1 && dtypes.indexOf('front')>=0) return 'MEDIUM';
+  return wincombo ? 'MEDIUM' : 'SMALL';
+}
+
+function opportunity(d){
+  var parts = [];
+  if(d.w) parts.push(d.w+'W');
+  if(d.d) parts.push(d.d+'D');
+  if(d.sid) parts.push('1 siding');
+  if(d.roof) parts.push('1 roof');
+  if(d.gut) parts.push('1 Gutt');
+  return parts.length ? parts.join(' ') : '—';
+}
+
+// ---------------- drive ----------------
+function haversine(a, b){
+  var R=3958.8, rad=Math.PI/180;
+  var la1=a[0]*rad, lo1=a[1]*rad, la2=b[0]*rad, lo2=b[1]*rad;
+  var dd = Math.pow(Math.sin((la2-la1)/2),2) + Math.cos(la1)*Math.cos(la2)*Math.pow(Math.sin((lo2-lo1)/2),2);
+  return 2*R*Math.asin(Math.sqrt(dd));
+}
+// Split "city|state" or plain "city" -> { city, state }.
+function splitLoc(v){
+  var s = low(v);
+  if(!s) return { city:'', state:'' };
+  var i = s.indexOf('|');
+  var city = (i >= 0 ? s.slice(0,i) : s).trim();
+  var state = (i >= 0 ? s.slice(i+1) : '').trim();
+  if(CITY_ALIASES[city]) city = CITY_ALIASES[city];
+  return { city:city, state:state };
+}
+function geoKey(city, state){ return city + '|' + state; }
+// State-aware lookup with an explicit fallback signal.
+// Returns { coord, fallback:false } on exact match, { coord, fallback:true, matchedState }
+// when the city name matches but the state doesn't (or state is unknown), or null if unknown.
+function geoLookup(city, state, geo){
+  city = low(city); if(!city) return null;
+  if(CITY_ALIASES[city]) city = CITY_ALIASES[city];
+  state = low(state || '');
+  if(state && geo[geoKey(city, state)]) return { coord:geo[geoKey(city, state)], fallback:false };
+  var prefix = city + '|';
+  var found = null;
+  for(var k in geo){ if(k.indexOf(prefix) === 0){ found = { coord:geo[k], fallback:true, matchedState:k.slice(prefix.length) }; break; } }
+  if(found) return found;
+  if(geo[city]) return { coord:geo[city], fallback:true, matchedState:'?' };   // legacy city-only key
+  return null;
+}
+// Minutes between two locations. Each loc is "city|state" or "city" (fallback triggered).
+function driveMinutes(loc1, loc2, geo){
+  var a = splitLoc(loc1), b = splitLoc(loc2);
+  var g1 = geoLookup(a.city, a.state, geo), g2 = geoLookup(b.city, b.state, geo);
+  if(!g1 || !g2) return null;
+  return haversine(g1.coord, g2.coord)*1.3/35*60;
+}
+
+// ---------------- Hungarian (Jonker-Volgenant, O(n^3)) ----------------
+// cost: rows x cols, minimize. Rectangular OK. Returns rowToCol (-1 = unassigned).
+function hungarianMin(cost){
+  var nr = cost.length; if(!nr) return [];
+  var nc = cost[0].length; if(!nc) return new Array(nr).fill(-1);
+  var transposed = false, C = cost;
+  if(nr > nc){
+    transposed = true;
+    C = [];
+    for(var j=0;j<nc;j++){ var rowT=[]; for(var i=0;i<nr;i++) rowT.push(cost[i][j]); C.push(rowT); }
+  }
+  var n = C.length, m = C[0].length;
+  var INF = Infinity;
+  var u = new Array(n+1).fill(0), v = new Array(m+1).fill(0);
+  var p = new Array(m+1).fill(0), way = new Array(m+1).fill(0);
+  for(var i1=1;i1<=n;i1++){
+    p[0]=i1;
+    var j0=0;
+    var minv = new Array(m+1).fill(INF), used = new Array(m+1).fill(false);
+    do {
+      used[j0]=true;
+      var i0=p[j0], delta=INF, j1=-1;
+      for(var j=1;j<=m;j++) if(!used[j]){
+        var cur = C[i0-1][j-1]-u[i0]-v[j];
+        if(cur<minv[j]){ minv[j]=cur; way[j]=j0; }
+        if(minv[j]<delta){ delta=minv[j]; j1=j; }
+      }
+      for(var j2=0;j2<=m;j2++){
+        if(used[j2]){ u[p[j2]]+=delta; v[j2]-=delta; }
+        else minv[j2]-=delta;
+      }
+      j0=j1;
+    } while(p[j0]!==0);
+    do { var jw=way[j0]; p[j0]=p[jw]; j0=jw; } while(j0);
+  }
+  var res = new Array(n).fill(-1);
+  for(var j3=1;j3<=m;j3++) if(p[j3]>0) res[p[j3]-1] = j3-1;
+  if(!transposed) return res;
+  var back = new Array(nr).fill(-1);
+  for(var k=0;k<res.length;k++) if(res[k]>=0) back[res[k]] = k;
+  return back;
+}
+// maximize
+function hungarianMax(score){
+  return hungarianMin(score.map(function(r){ return r.map(function(x){ return -x; }); }));
+}
+
+// ---------------- reference-data shaping ----------------
+function global60Of(d60){
+  var tn=0, ti=0;
+  Object.keys(d60).forEach(function(k){ tn += d60[k].vol; ti += d60[k].issued; });
+  return ti ? tn/ti : 0;
+}
+
+// ctx: { rank, d60, global60, geo, aliases, prodMap, avail:[{disp,c,origin,home}] }
+function makeScorer(ctx){
+  var K=CONST.K, K2=CONST.K2;
+  var prior = {};
+  PRODUCTS.forEach(function(p){
+    var tnum=0, tot=0;
+    ctx.avail.forEach(function(a){
+      var d = ctx.rank[a.c][p]; tnum += d.nsli*d.leads; tot += d.leads;
+    });
+    prior[p] = tot>0 ? tnum/tot : 0;
+  });
+  function get60(c){ return ctx.d60[c] || null; }
+  function repPrior(c){
+    var g = get60(c); if(!g) return null;
+    return (g.issued*g.nsli + K2*ctx.global60) / (g.issued + K2);
+  }
+  function eff(c, p){
+    var d = ctx.rank[c][p], rp = repPrior(c);
+    var base = rp !== null ? rp : prior[p];
+    return (d.leads*d.nsli + K*base) / (d.leads + K);
+  }
+  function baseVal(c, comps){
+    var s=0; comps.forEach(function(p){ s += eff(c,p); }); return s/comps.length;
+  }
+  var vols = ctx.avail.map(function(a){ var g=get60(a.c); return g && g.vol>0 ? g.vol : 0; }).filter(function(x){ return x>0; });
+  var VOL_MAX = vols.length ? Math.max.apply(null, vols) : 1.0;
+  function volnorm(c){ var g=get60(c); return g ? Math.max(0,g.vol)/VOL_MAX : 0; }
+  function tiebreak(c){
+    var g = get60(c);
+    if(g) return 1e-3*g.close + 1e-7*g.nsli + 1e-10*g.issued;
+    var t = ctx.rank[c]._tot;
+    return 1e-3*t.close + 1e-7*t.nsli + 1e-10*t.leads;
+  }
+  return { eff:eff, baseVal:baseVal, volnorm:volnorm, tiebreak:tiebreak, get60:get60, prior:prior, VOL_MAX:VOL_MAX };
+}
+
+// ---------------- skip rules ----------------
+// Returns a skip reason string, 'bath' (route to bath board — NOT a skip anymore), or null.
+// `market` argument was hard-coded 'DC Metro' before; now the caller passes it in.
+function classifySkip(lead, market){
+  if(low(lead['Service Provider']) === CANCEL_REP) return 'cancelled';
+  if(SKIP_STATUS.indexOf(low(lead['Status'])) >= 0) return 'open';
+  if(SKIP_CAMPAIGN.indexOf(low(lead['Campaign'])) >= 0) return 'campaign';
+  var wanted = low(market || 'dc metro');
+  if(low(lead['Market']) !== wanted) return 'market';
+  if(String(lead['Product']||'').trim().toUpperCase() === 'BATHSYSTEM') return 'bath';   // route, don't drop
+  return null;
+}
+
+// ---------------- note pins ----------------
+function findNotePins(notes, availCanon){
+  var byName = {};
+  availCanon.forEach(function(c){
+    var parts = c.split(' ');
+    [parts[parts.length-1], parts[0]].forEach(function(p){
+      if(!byName[p]) byName[p] = [];
+      if(byName[p].indexOf(c)<0) byName[p].push(c);
+    });
+  });
+  var nt = String(notes||'').toLowerCase();
+  var hits = all(/\b(?:send|assign|give|have|book)\s+(?:it\s+|this\s+|to\s+)*([a-z]+)/, nt).map(function(m){ return m[1]; })
+    .concat(all(/\b([a-z]+)\s+to\s+run\b/, nt).map(function(m){ return m[1]; }));
+  for(var i=0;i<hits.length;i++){
+    var cand = byName[hits[i]];
+    if(cand && cand.length===1) return cand[0];
+  }
+  return null;
+}
+
+// ---------------- lead detail parsing ----------------
+function describeLead(lead, prodMap){
+  var raw = String(lead['Notes'] == null ? '' : lead['Notes']).toLowerCase().split('pre-cust')[0];
+  var prod = String(lead['Product']||'').trim();
+  var pu = prod.toUpperCase();
+  var W = parseWindows(raw), D = parseDoors(raw);
+  var w = W.count, wk = W.known, d = D.count, dt = D.types, dk = D.known;
+  if(pu.indexOf('WIN')>=0 && w===0){
+    var rng = all(/(\d+)\s*[-–]\s*(\d+)/, raw);
+    if(rng.length){ w = Math.max.apply(null, rng.map(function(m){ return parseInt(m[2],10); })); wk = true; }
+    else { var bn = bareNumber(raw); if(bn){ w = bn; wk = true; } }
+  }
+  if(pu === 'DOORS' && d===0 && !dt.length){
+    var bn2 = bareNumber(raw); if(bn2){ d = bn2; dk = true; }
+  }
+  var comps = (prodMap && prodMap[prod]) || PRODC[prod] || ['Windows'];
+  var known = !!((prodMap && prodMap[prod]) || PRODC[prod]);
+  var tk = prodTokens(prod);
+  var inTk = function(x){ return tk.indexOf(x)>=0; };
+  return {
+    comps: comps, knownProduct: known, prod: prod, w: w, d: d, dtypes: dt,
+    tier: tierOf(prod, w, wk, d, dt, prodMap),
+    city: String(lead['City']||'').trim(),
+    sid:  comps.indexOf('Siding')>=0  || /\bsiding/.test(raw) || pu.indexOf('SIDING')>=0 || inTk('S') || inTk('SID'),
+    roof: comps.indexOf('Roofing')>=0 || /\broof/.test(raw)   || pu.indexOf('ROOF')>=0   || inTk('R'),
+    gut:  comps.indexOf('Gutters')>=0 || /\bgutter/.test(raw) || pu.indexOf('GUTTER')>=0 || inTk('G') || inTk('GUT'),
+    bath: pu.indexOf('BATH')>=0,
+    resched: /resched/.test(raw)
+  };
+}
+
+// ================= main run =================
+// input: {
+//   market: 'DC Metro' | 'Hampton Roads' | 'Richmond',   (defaults 'DC Metro')
+//   slot, leads:[rowObj],
+//   fieldRoster:[canon], bathRoster:[canon],             (or legacy: `roster` == fieldRoster)
+//   rank, d60, global60, homes, origins, geo, aliases, prodMap,
+//   ceil, floor, bottomExclude,                          (per-market; fall back to defaults)
+//   manualPins:{leadIndex:canon}
+// }
+function run(input){
+  var market = input.market || 'DC Metro';
+  var geo = input.geo || DEFAULT_GEO;
+  var aliases = input.aliases || DEFAULT_ALIASES;
+  var prodMap = input.prodMap || {};
+  var leads = input.leads;
+  var ceil = (input.ceil != null) ? input.ceil : (DEFAULT_CEIL[market] || 120);
+  var floor = (input.floor != null) ? input.floor : (DEFAULT_FLOOR[market] || 5000);
+  var bottomExclude = input.bottomExclude || DEFAULT_BOTTOM_EXCLUDE[market] || [];
+  var marketTeams = TEAMS_BY_MARKET[market] || [];
+
+  // --- skip rules (read original Service Provider first). 'bath' = route, not drop. ---
+  var skips = { market:0, cancelled:0, open:0, campaign:0, bath:0 };
+  var dropped = {};
+  var bathLeadIdx = [];
+  leads.forEach(function(l, i){
+    var why = classifySkip(l, market);
+    if(why === 'bath'){ bathLeadIdx.push(i); skips.bath++; return; }
+    if(why){ dropped[i] = why; skips[why]++; }
+  });
+
+  // --- roster resolution (fieldRoster/bathRoster; legacy `roster` still accepted) ---
+  var fieldRoster = (input.fieldRoster || input.roster || []).map(function(x){ return canon(x, aliases); });
+  var bathRoster = (input.bathRoster || []).map(function(x){ return canon(x, aliases); });
+
+  var missingData = fieldRoster.concat(bathRoster).filter(function(c){
+    return !input.rank[c] || !input.homes[c];
+  });
+
+  // Enforce team constraints on the field pool (Kappa never on any field board),
+  // and on the bath pool (only Kappa). Wrong-team picks get surfaced, not silently dropped.
+  var wrongTeamField = [], wrongTeamBath = [];
+  function makeAvail(c){
+    return { c:c, disp:title(c), home:input.homes[c],
+             origin:(input.origins && input.origins[c]) || input.homes[c] };
+  }
+  var fieldAvail = fieldRoster.filter(function(c){
+    if(!input.rank[c] || !input.homes[c]) return false;
+    if(bottomExclude.indexOf(c) >= 0) return false;
+    var team = input.rank[c].team;
+    // If team is unknown, allow (backward compat with fixtures that don't set team).
+    // If team is known, it must be a market team AND must not be BATH_TEAM.
+    if(team){
+      if(team === BATH_TEAM){ wrongTeamField.push({rep:c, team:team, reason:'Kappa (bath) rep can never be on a field board'}); return false; }
+      if(marketTeams.length && marketTeams.indexOf(team) < 0){
+        wrongTeamField.push({rep:c, team:team, reason:'team "' + team + '" is not in market "' + market + '" (' + marketTeams.join('/') + ')'});
+        return false;
+      }
+    }
+    return true;
+  }).map(makeAvail);
+  var bathAvail = bathRoster.filter(function(c){
+    if(!input.rank[c] || !input.homes[c]) return false;
+    var team = input.rank[c].team;
+    if(team && team !== BATH_TEAM){
+      wrongTeamBath.push({rep:c, team:team, reason:'only Kappa reps belong on the bath board'});
+      return false;
+    }
+    return true;
+  }).map(makeAvail);
+
+  var combinedAvail = fieldAvail.concat(bathAvail);
+  var combinedC = combinedAvail.map(function(a){ return a.c; });
+
+  // --- note pins + manual pins (match against union of both crews) ---
+  var pins = {};
+  leads.forEach(function(l, i){
+    if(dropped[i]) return;
+    var r = findNotePins(l['Notes'], combinedC);
+    if(r) pins[i] = { rep:r, source:'note' };
+  });
+  Object.keys(input.manualPins || {}).forEach(function(k){
+    var i = parseInt(k,10), rep = canon(input.manualPins[k], aliases);
+    if(dropped[i] || !rep) return;
+    if(combinedC.indexOf(rep) < 0) return;
+    pins[i] = { rep:rep, source:'manual' };
+  });
+  var seenPin = {};
+  Object.keys(pins).map(Number).sort(function(a,b){ return a-b; }).forEach(function(i){
+    var r = pins[i].rep;
+    if(seenPin[r]) delete pins[i]; else seenPin[r] = true;
+  });
+  var pinnedReps = Object.keys(pins).map(function(i){ return pins[i].rep; });
+
+  // --- describe every live lead (field or bath) ---
+  var L = {};
+  leads.forEach(function(l, i){
+    if(dropped[i]) return;
+    L[i] = describeLead(l, prodMap);
+    L[i].stateAbbr = l['State'] == null ? '' : String(l['State']).trim();
+    L[i].isBathLead = bathLeadIdx.indexOf(i) >= 0;
+  });
+
+  // --- scorer over the union pool ---
+  var ctx = { rank:input.rank, d60:input.d60, global60:input.global60, geo:geo, avail:combinedAvail };
+  var S = makeScorer(ctx);
+
+  // --- geo coverage + state-fallback warnings ---
+  var missingGeo = [], stateFallbacks = [];
+  function trackGeoRef(rawCity, rawState){
+    var city = low(rawCity); if(!city) return;
+    if(CITY_ALIASES[city]) city = CITY_ALIASES[city];
+    var lookup = geoLookup(city, rawState, geo);
+    if(!lookup){ if(missingGeo.indexOf(city) < 0) missingGeo.push(city); return; }
+    if(lookup.fallback && rawState && low(rawState) !== lookup.matchedState){
+      var key = city + '|' + low(rawState||'') + '->' + lookup.matchedState;
+      if(!stateFallbacks.some(function(x){ return x.key === key; }))
+        stateFallbacks.push({ key:key, city:city, requestedState:low(rawState), matchedState:lookup.matchedState });
+    }
+  }
+  Object.keys(L).forEach(function(i){ trackGeoRef(L[i].city, L[i].stateAbbr); });
+  combinedAvail.forEach(function(a){ var p = splitLoc(a.origin); trackGeoRef(p.city, p.state); });
+  missingGeo.sort();
+
+  function driveTo(origin, city, state){
+    return driveMinutes(origin, city + (state ? ('|' + low(state)) : ''), geo);
+  }
+
+  // ================== FIELD BOARD (tier-ordered, BIG->MEDIUM->SMALL) ==================
+  var fieldPool = fieldAvail.filter(function(a){ return pinnedReps.indexOf(a.c) < 0; });
+  var fieldOpenIdx = Object.keys(L).map(Number).filter(function(i){ return !L[i].isBathLead && !pins[i]; });
+  var res = {};
+  var live = fieldPool.slice();
+  ['BIG','MEDIUM','SMALL'].forEach(function(T){
+    var tierLeads = fieldOpenIdx.filter(function(i){ return L[i].tier === T; });
+    if(!tierLeads.length) return;
+    if(!live.length){ tierLeads.forEach(function(i){ res[i] = null; }); return; }
+    var M = [], DR = [];
+    tierLeads.forEach(function(i, a){
+      M[a] = []; DR[a] = [];
+      live.forEach(function(rep, b){
+        var dm = driveTo(rep.origin, L[i].city, L[i].stateAbbr);
+        DR[a][b] = dm;
+        if(dm === null || dm > ceil){ M[a][b] = -1e9; return; }
+        var bv = S.baseVal(rep.c, L[i].comps);
+        if(T === 'BIG' && bv < floor){ M[a][b] = -1e9; return; }
+        M[a][b] = bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*dm + S.tiebreak(rep.c);
+      });
+    });
+    var rowToCol = hungarianMax(M);
+    var used = [];
+    tierLeads.forEach(function(i, a){
+      var b = rowToCol[a];
+      if(b >= 0 && M[a][b] > -1e8){
+        var rep = live[b];
+        res[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, L[i].comps) };
+        used.push(rep.c);
+      } else res[i] = null;
+    });
+    live = live.filter(function(r){ return used.indexOf(r.c) < 0; });
+  });
+  // `live` is now the field bench (unassigned field reps), available for bath overflow.
+
+  function feasibleField(i, applyFloor){
+    var d = L[i];
+    return fieldAvail.filter(function(a){
+      var dm = driveTo(a.origin, d.city, d.stateAbbr);
+      if(dm === null || dm > ceil) return false;
+      if(applyFloor && S.baseVal(a.c, d.comps) < floor) return false;
+      return true;
+    }).map(function(a){ return a.disp; });
+  }
+
+  // ================== BATH BOARD ==================
+  // (a) Kappa first (single tier — spec says default all bath to MEDIUM)
+  // (b) Overflow to remaining field bench, ranked by bath score
+  var bathPool = bathAvail.filter(function(a){ return pinnedReps.indexOf(a.c) < 0; });
+  var bathOpenIdx = bathLeadIdx.filter(function(i){ return !pins[i]; });
+  var bathRes = {};
+  function bathScore(rep, d){
+    var bv = S.baseVal(rep.c, ['Bath']);
+    var dm = driveTo(rep.origin, d.city, d.stateAbbr);
+    return { bv:bv, dm:dm };
+  }
+  function runBathPass(leadIdxs, poolArr, overflow){
+    if(!leadIdxs.length || !poolArr.length) return [];
+    var M = [], DR = [];
+    leadIdxs.forEach(function(i, a){
+      M[a] = []; DR[a] = [];
+      poolArr.forEach(function(rep, b){
+        var d = L[i];
+        var s = bathScore(rep, d);
+        DR[a][b] = s.dm;
+        if(s.dm === null || s.dm > ceil){ M[a][b] = -1e9; return; }
+        M[a][b] = s.bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*s.dm + S.tiebreak(rep.c);
+      });
+    });
+    var rowToCol = hungarianMax(M);
+    var usedIdx = [];
+    leadIdxs.forEach(function(i, a){
+      var b = rowToCol[a];
+      if(b >= 0 && M[a][b] > -1e8){
+        var rep = poolArr[b];
+        bathRes[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, ['Bath']), overflow:overflow };
+        usedIdx.push(b);
+      }
+    });
+    return usedIdx.map(function(b){ return poolArr[b].c; });
+  }
+  runBathPass(bathOpenIdx, bathPool, false);
+  var overflowLeads = bathOpenIdx.filter(function(i){ return !bathRes[i]; });
+  var overflowUsedC = runBathPass(overflowLeads, live, true);
+  // remove overflow reps from field bench so we never double-book
+  live = live.filter(function(r){ return overflowUsedC.indexOf(r.c) < 0; });
+  bathOpenIdx.forEach(function(i){ if(!bathRes[i]) bathRes[i] = null; });
+
+  function feasibleBath(i){
+    var d = L[i];
+    return bathAvail.filter(function(a){
+      var dm = driveTo(a.origin, d.city, d.stateAbbr);
+      return dm !== null && dm <= ceil;
+    }).map(function(a){ return a.disp; });
+  }
+
+  // ================== duplicates ==================
+  var seen = {}, dupes = [];
+  leads.forEach(function(l, i){
+    if(dropped[i]) return;
+    var key = low(l['Customer Name'])+'|'+low(l['City'])+'|'+low(l['Start Date/Time']||l['Start Time']||'');
+    if(seen[key] !== undefined) dupes.push([seen[key], i]); else seen[key] = i;
+  });
+
+  // ================== build rows ==================
+  function flagsFor(rep, dm, d){
+    var f = [];
+    f.push('from: ' + originDisp(rep.origin));
+    var g = S.get60(rep.c);
+    if(g) f.push('60-day vol $' + Math.round(g.vol/1000) + 'K');
+    if(dm > 75) f.push('verify drive ~' + Math.round(dm) + 'm');
+    var thin = d.comps.every(function(p){ return ctx.rank[rep.c][p] && ctx.rank[rep.c][p].leads < 5; });
+    if(thin) f.push('thin 2-wk product volume — leaning on 60-day overall');
+    var iss = g ? Math.round(g.issued) : 0;
+    if(d.tier === 'BIG' && iss < 10) f.push('limited 60-day volume (' + iss + ' issued) — verify for BIG lead');
+    return { flags:f, thin:thin };
+  }
+
+  var rows = [];
+  fieldOpenIdx.forEach(function(i){
+    var d = L[i], r = res[i];
+    var row = { i:i, lead:leads[i], tier:d.tier, opp:opportunity(d), detail:d,
+      rep:null, origin:null, drive:null, eff:null, flags:[], state:'', pinned:false, board:'field' };
+    if(r){
+      var fr = flagsFor(r.rep, r.drive, d);
+      row.rep = r.rep; row.origin = originDisp(r.rep.origin); row.drive = Math.round(r.drive);
+      row.eff = Math.round(r.eff); row.flags = fr.flags;
+      row.state = (r.drive > 75 || fr.thin) ? 'warn' : (d.tier === 'BIG' ? 'big' : '');
+    } else {
+      var fa = feasibleField(i, d.tier === 'BIG');
+      if(d.tier === 'BIG' && !fa.length && feasibleField(i, false).length)
+        row.flags = ['UNFILLED — reachable reps all below $' + floor.toLocaleString('en-US') + ' BIG floor'];
+      else if(fa.length)
+        row.flags = ['UNCOVERED — only reachable: ' + fa.join(', ') + ' (taken)'];
+      else
+        row.flags = ['UNCOVERED — no rep within ' + ceil + 'm'];
+      row.state = 'bad';
+    }
+    if(!d.knownProduct) row.flags.push('unknown product code "' + d.prod + '" — scored as Windows');
+    if(d.resched) row.flags.push('notes mention a reschedule — check');
+    rows.push(row);
+  });
+
+  // pinned rows (either board — split them below)
+  Object.keys(pins).map(Number).forEach(function(i){
+    var d = L[i], c = pins[i].rep;
+    var rep = combinedAvail.filter(function(a){ return a.c === c; })[0];
+    var dm = rep ? driveTo(rep.origin, d.city, d.stateAbbr) : null;
+    var bv = rep ? S.baseVal(c, d.isBathLead ? ['Bath'] : d.comps) : null;
+    var repTeam = rep && input.rank[c] ? input.rank[c].team : null;
+    var isBathRep = repTeam === BATH_TEAM;
+    var row = { i:i, lead:leads[i], tier:d.tier, opp:opportunity(d), detail:d,
+      rep:rep, origin: rep ? originDisp(rep.origin) : null,
+      drive: dm === null ? null : Math.round(dm), eff: bv === null ? null : Math.round(bv),
+      flags:['PINNED per note -> ' + title(c)], state:'pin', pinned:true,
+      board: d.isBathLead ? 'bath' : 'field' };
+    if(pins[i].source === 'manual') row.flags = ['PINNED by hand -> ' + title(c)];
+    if(!d.isBathLead && isBathRep) row.flags.push('PIN OVERRIDE: Kappa (bath) rep pinned on field lead');
+    if(d.isBathLead && !isBathRep) row.flags.push('OVERFLOW pin: field rep on bath lead');
+    if(dm !== null && dm > 75) row.flags.push('verify drive ~' + Math.round(dm) + 'm');
+    if(d.resched) row.flags.push('notes mention a reschedule — check');
+    rows.push(row);
+  });
+
+  // bath board rows (Kappa + overflow), keep separate
+  var bathRows = [];
+  bathOpenIdx.forEach(function(i){
+    var d = L[i], r = bathRes[i];
+    var row = { i:i, lead:leads[i], tier:d.tier, opp:opportunity(d), detail:d,
+      rep:null, origin:null, drive:null, eff:null, flags:[], state:'', pinned:false,
+      board:'bath', overflow:false };
+    if(r){
+      var fr = flagsFor(r.rep, r.drive, { tier:d.tier, comps:['Bath'] });
+      row.rep = r.rep; row.origin = originDisp(r.rep.origin); row.drive = Math.round(r.drive);
+      row.eff = Math.round(r.eff); row.flags = fr.flags;
+      row.overflow = r.overflow;
+      if(r.overflow) row.flags.unshift('OVERFLOW from field bench (scored on Bath)');
+      row.state = r.overflow ? 'warn' : (r.drive > 75 ? 'warn' : '');
+    } else {
+      var fa = feasibleBath(i);
+      row.flags = fa.length
+        ? ['UNCOVERED — only Kappa reachable: ' + fa.join(', ') + ' (taken); no field bench available']
+        : ['UNCOVERED — no bath rep within ' + ceil + 'm and no field bench available'];
+      row.state = 'bad';
+    }
+    if(d.resched) row.flags.push('notes mention a reschedule — check');
+    bathRows.push(row);
+  });
+
+  // move pinned bath rows out of `rows` into `bathRows`
+  var bathPinned = rows.filter(function(r){ return r.board === 'bath'; });
+  rows = rows.filter(function(r){ return r.board !== 'bath'; });
+  bathRows = bathRows.concat(bathPinned);
+
+  rows.sort(function(a,b){ return a.i - b.i; });
+  bathRows.sort(function(a,b){ return a.i - b.i; });
+
+  dupes.forEach(function(pair){
+    rows.concat(bathRows).forEach(function(r){ if(r.i===pair[0] || r.i===pair[1]) r.flags.push('possible duplicate lead'); });
+  });
+  stateFallbacks.forEach(function(sf){
+    rows.concat(bathRows).forEach(function(r){
+      if(low(r.lead['City']) === sf.city && low(r.lead['State']) === sf.requestedState)
+        r.flags.push('city matched with wrong state (' + sf.matchedState.toUpperCase() + ') — verify coordinates');
+    });
+  });
+
+  // --- benches ---
+  var fieldUsedC = rows.filter(function(r){ return r.rep; }).map(function(r){ return r.rep.c; });
+  var bench = fieldAvail.filter(function(a){
+    return fieldUsedC.indexOf(a.c) < 0 && overflowUsedC.indexOf(a.c) < 0;
+  }).map(function(a){ var g = S.get60(a.c); return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })
+    .sort(function(x,y){ return y.vol - x.vol; });
+  var bathUsedC = bathRows.filter(function(r){ return r.rep && !r.overflow; }).map(function(r){ return r.rep.c; });
+  var bathBench = bathAvail.filter(function(a){ return bathUsedC.indexOf(a.c) < 0; })
+    .map(function(a){ var g = S.get60(a.c); return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })
+    .sort(function(x,y){ return y.vol - x.vol; });
+
+  var unknownProducts = {};
+  rows.concat(bathRows).forEach(function(r){
+    if(!r.detail.knownProduct && r.detail.prod) unknownProducts[r.detail.prod] = true;
+  });
+
+  return {
+    market: market, ceil: ceil, floor: floor,
+    rows: rows, bench: bench,
+    bathRows: bathRows, bathBench: bathBench,
+    dropped: dropped, skips: skips,
+    missingGeo: missingGeo, stateFallbacks: stateFallbacks,
+    missingData: missingData, wrongTeamField: wrongTeamField, wrongTeamBath: wrongTeamBath,
+    unknownProducts: Object.keys(unknownProducts),
+    pins: pins, avail: combinedAvail, fieldAvail: fieldAvail, bathAvail: bathAvail,
+    overflowUsed: overflowUsedC.length > 0,
+    counts: {
+      assigned: rows.filter(function(r){ return r.rep; }).length,
+      unfilled: rows.filter(function(r){ return !r.rep; }).length,
+      pinned: Object.keys(pins).length,
+      skipped: Object.keys(dropped).length,
+      bench: bench.length,
+      bathAssigned: bathRows.filter(function(r){ return r.rep && !r.overflow; }).length,
+      bathOverflow: overflowUsedC.length,
+      bathUnfilled: bathRows.filter(function(r){ return !r.rep; }).length,
+      bathBench: bathBench.length
+    }
+  };
+}
+
+// origin display: "bowie|md" -> "Bowie" (drop state suffix for the on-screen label)
+function originDisp(o){
+  var p = splitLoc(o); return title(p.city);
+}
+
+global.ENGINE = {
+  CONST: CONST, PRODC: PRODC, PRODUCTS: PRODUCTS,
+  MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM,
+  DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_CEIL: DEFAULT_CEIL, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
+  DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
+  CITY_ALIASES: CITY_ALIASES, BOTTOM_EXCLUDE: BOTTOM_EXCLUDE,
+  low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
+  parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber,
+  tierOf: tierOf, opportunity: opportunity, describeLead: describeLead,
+  haversine: haversine, driveMinutes: driveMinutes,
+  hungarianMin: hungarianMin, hungarianMax: hungarianMax,
+  classifySkip: classifySkip, findNotePins: findNotePins,
+  makeScorer: makeScorer, global60Of: global60Of, run: run
+};
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+
+<!-- ================================================================
+     APP — DOM, file parsing, storage, xlsx output
+     ================================================================ -->
+<script id="app">
+(function(){
+'use strict';
+var E = window.ENGINE;
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+var el = function(tag, attrs, kids){
+  var n = document.createElement(tag);
+  Object.keys(attrs||{}).forEach(function(k){
+    if(k === 'class') n.className = attrs[k];
+    else if(k === 'text') n.textContent = attrs[k];
+    else if(k.indexOf('on')===0) n.addEventListener(k.slice(2), attrs[k]);
+    else if(attrs[k] !== null && attrs[k] !== false) n.setAttribute(k, attrs[k]);
+  });
+  (kids||[]).forEach(function(c){ n.appendChild(c); });
+  return n;
+};
+
+// ---------------- storage ----------------
+// Bumped key to v2 because the shapes changed: geo is city|state, presets are per-market,
+// per-market ceil/floor/exclusions live here now.
+var KEY = 'lae.v2';
+var OLD_KEY = 'lae.v1';
+var store = {
+  refs: null,
+  geo: {}, aliases: {}, homeOverrides: {}, prodMap: {},
+  presets: {},              // { 'DC Metro': { name:[canon,...], ... }, 'Hampton Roads': {...}, 'Richmond': {...} }
+  ceil: {}, floor: {},      // per-market overrides
+  bottomExclude: {}         // per-market extra exclusions on top of defaults? (kept for future UI)
+};
+function load(){
+  try {
+    var raw = localStorage.getItem(KEY);
+    if(!raw){
+      var legacy = localStorage.getItem(OLD_KEY);
+      if(legacy){
+        var lo = JSON.parse(legacy);
+        // migrate: presets was flat -> attribute to DC Metro (that was the only market before)
+        if(lo.presets && !Array.isArray(lo.presets) && Object.keys(lo.presets).length){
+          var isFlat = Object.values(lo.presets).some(function(v){ return Array.isArray(v); });
+          if(isFlat) lo.presets = { 'DC Metro': lo.presets };
+        }
+        raw = JSON.stringify(lo);
+      }
+    }
+    if(raw){ var o = JSON.parse(raw); Object.keys(o).forEach(function(k){ store[k] = o[k]; }); }
+  } catch(e){ console.warn('storage read failed', e); }
+  if(!store.geo) store.geo = {};
+  if(!store.homeOverrides || !Object.keys(store.homeOverrides).length)
+    store.homeOverrides = JSON.parse(JSON.stringify(E.DEFAULT_HOME_OVERRIDES));
+  if(!store.aliases) store.aliases = {};
+  if(!store.prodMap) store.prodMap = {};
+  if(!store.presets) store.presets = {};
+  if(!store.ceil) store.ceil = {};
+  if(!store.floor) store.floor = {};
+  if(!store.bottomExclude) store.bottomExclude = {};
+}
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(store)); }
+  catch(e){ alert('Could not save settings to this browser: ' + e.message); }
+}
+function geoAll(){
+  var g = Object.assign({}, E.DEFAULT_GEO);
+  Object.keys(store.geo).forEach(function(k){ g[k] = store.geo[k]; });
+  return g;
+}
+function aliasAll(){
+  var a = Object.assign({}, E.DEFAULT_ALIASES);
+  Object.keys(store.aliases).forEach(function(k){ a[k] = store.aliases[k]; });
+  return a;
+}
+function prodAll(){
+  var p = Object.assign({}, E.PRODC);
+  Object.keys(store.prodMap).forEach(function(k){ p[k] = store.prodMap[k]; });
+  return p;
+}
+
+// ---------------- xlsx reading (SheetJS) ----------------
+// ExcelJS is not used for reading: it hangs forever on workbooks containing
+// chartsheets, and the real Rep Phone List has nine of them.
+function num(v){
+  if(typeof v === 'number') return isFinite(v) ? v : 0;
+  var n = parseFloat(String(v == null ? '' : v).replace(/[$,%\s,]/g, ''));
+  return isFinite(n) ? n : 0;
+}
+function str(v){ return v === null || v === undefined ? '' : String(v).trim(); }
+
+function readWorkbook(file){
+  return file.arrayBuffer().then(function(buf){
+    return XLSX.read(new Uint8Array(buf), { type:'array', cellDates:true, cellNF:true, cellStyles:false });
+  });
+}
+function sheet(wb, name){
+  var ws = wb.Sheets[name];
+  if(!ws) throw new Error('This file has no sheet named "' + name + '". Sheets found: ' +
+    wb.SheetNames.map(function(n){ return '"'+n+'"'; }).join(', '));
+  return ws;
+}
+// dense array-of-arrays with 0-based [row][col] indices matching pandas
+function aoa(ws){
+  var ref = ws['!ref'];
+  if(!ref) return [];
+  var r = XLSX.utils.decode_range(ref), out = [];
+  for(var R = 0; R <= r.e.r; R++){
+    var row = [];
+    for(var C = 0; C <= r.e.c; C++){
+      var cell = ws[XLSX.utils.encode_cell({ r:R, c:C })];
+      row.push(cell ? cell.v : null);
+    }
+    out.push(row);
+  }
+  return out;
+}
+function headerIndex(rowArr){
+  var m = {};
+  (rowArr||[]).forEach(function(v, i){ var k = str(v); if(k && m[k] === undefined) m[k] = i; });
+  return m;
+}
+
+// power ranking: sheet "2 Weeks-Overall", no header row, rep rows from index 5.
+// Team column is at index 2 (drives market/crew membership). Bath block was added
+// at column 99 in the v3.0.9 file — same +0 / +12 / +15 layout as every other block.
+function parseRank(wb){
+  var A = aoa(sheet(wb, '2 Weeks-Overall'));
+  var PS = { Windows:19, Doors:35, Siding:51, Gutters:67, Roofing:83, Bath:99 }, TOT = 3;
+  var out = {};
+  for(var r = 5; r < A.length; r++){
+    var row = A[r] || [];
+    var gv = function(c){ var v = row[c]; return typeof v === 'number' && isFinite(v) ? v : 0; };
+    var fn = row[0];
+    if(fn === null || fn === undefined || String(fn).trim() === '') continue;
+    var nm = (String(fn).trim() + ' ' + str(row[1])).toLowerCase().trim();
+    var rec = { team: str(row[2]) };
+    Object.keys(PS).forEach(function(p){
+      var c = PS[p];
+      rec[p] = { leads: gv(c), close: gv(c+12), nsli: gv(c+15) };
+    });
+    rec._tot = { leads: gv(TOT), close: gv(TOT+12), nsli: gv(TOT+15) };
+    out[nm] = rec;
+  }
+  if(!Object.keys(out).length) throw new Error('No rep rows found on "2 Weeks-Overall".');
+  return out;
+}
+
+// 60-day: sheet "Sales Efficiency All", header at row index 1
+function parse60(wb){
+  var A = aoa(sheet(wb, 'Sales Efficiency All'));
+  var h = headerIndex(A[1]);
+  var need = ['Sales Representative Name','Issued','Close %','Closed $','Rescinded Value','Cancelled Value'];
+  var missing = need.filter(function(k){ return h[k] === undefined; });
+  if(missing.length) throw new Error('60-day sheet is missing column(s): ' + missing.join(', '));
+  var out = {};
+  for(var r = 2; r < A.length; r++){
+    var row = A[r] || [];
+    var nm = str(row[h['Sales Representative Name']]).toLowerCase();
+    if(!nm || nm === 'total') continue;
+    var iss = num(row[h['Issued']]);
+    var net = num(row[h['Closed $']]) - num(row[h['Rescinded Value']]) - num(row[h['Cancelled Value']]);
+    out[nm] = { nsli: iss > 0 ? net/iss : 0, close: num(row[h['Close %']]), issued: iss, vol: net };
+  }
+  if(!Object.keys(out).length) throw new Error('No rep rows found on "Sales Efficiency All".');
+  return out;
+}
+
+// phone list: sheet "Sheet1", header row 0. Location is "City, ST" -> emit "city|state".
+function parseHomes(wb){
+  var A = aoa(sheet(wb, 'Sheet1'));
+  var h = headerIndex(A[0]);
+  if(h['Sales Representatives DMV'] === undefined || h['Location'] === undefined)
+    throw new Error('Phone list needs columns "Sales Representatives DMV" and "Location". Found: ' +
+      Object.keys(h).slice(0,8).join(', '));
+  var out = {}, ali = aliasAll();
+  for(var r = 1; r < A.length; r++){
+    var row = A[r] || [];
+    var nm = str(row[h['Sales Representatives DMV']]);
+    if(!nm) continue;
+    var parts = str(row[h['Location']]).split(',');
+    var city = parts[0].trim().toLowerCase().replace(' bch', ' beach');
+    var state = (parts[1] || '').trim().toLowerCase();
+    if(city && city !== 'location' && city !== 'nan')
+      out[E.canon(nm, ali)] = state ? (city + '|' + state) : city;
+  }
+  if(!Object.keys(out).length) throw new Error('No rep rows found on "Sheet1".');
+  return out;
+}
+
+// lead sheet: "SAPUI5 Export", header row 0
+var LEAD_SHEET = 'SAPUI5 Export';
+function parseLeads(wb){
+  var name = wb.Sheets[LEAD_SHEET] ? LEAD_SHEET : wb.SheetNames[0];
+  var ws = sheet(wb, name);
+  var A = aoa(ws);
+  if(!A.length) throw new Error('That sheet is empty.');
+  var hdr = (A[0] || []).map(str);
+  var rows = [], fmt = {};
+  var range = XLSX.utils.decode_range(ws['!ref']);
+  for(var r = 1; r < A.length; r++){
+    var o = { _row: r + 1 }, any = false;   // _row = 1-based excel row
+    for(var c = 0; c < hdr.length; c++){
+      if(!hdr[c]) continue;
+      var v = A[r][c];
+      o[hdr[c]] = v;
+      if(v !== null && v !== undefined && String(v).trim() !== '') any = true;
+      if(v instanceof Date && !fmt[hdr[c]]){
+        var cell = ws[XLSX.utils.encode_cell({ r:r, c:c })];
+        fmt[hdr[c]] = (cell && cell.z) || 'm/d/yyyy h:mm';
+      }
+    }
+    if(any) rows.push(o);
+  }
+  return { rows: rows, hdr: hdr, sheetName: name, fmt: fmt };
+}
+
+// prior board: first sheet carrying Service Provider + City. Reads State so chained
+// origins are state-tagged; without it, driveMinutes falls back to any-state match.
+function parsePriorBoard(wb){
+  var pick = null, hdr = null;
+  for(var i = 0; i < wb.SheetNames.length; i++){
+    var A = aoa(wb.Sheets[wb.SheetNames[i]]);
+    if(!A.length) continue;
+    var h = headerIndex(A[0]);
+    if(h['Service Provider'] !== undefined && h['City'] !== undefined){ pick = A; hdr = h; break; }
+  }
+  if(!pick) throw new Error('Prior board needs "Service Provider" and "City" columns.');
+  var m = {}, ali = aliasAll(), hasState = hdr['State'] !== undefined;
+  for(var r = 1; r < pick.length; r++){
+    var row = pick[r] || [];
+    var rep = str(row[hdr['Service Provider']]);
+    var city = str(row[hdr['City']]);
+    if(!rep || !city || city.toLowerCase() === 'nan') continue;   // bench rows have no city -> rep falls back to home
+    var state = hasState ? str(row[hdr['State']]).toLowerCase() : '';
+    m[E.canon(rep, ali)] = state ? (city.toLowerCase() + '|' + state) : city.toLowerCase();
+  }
+  return m;
+}
+
+// ---------------- app state ----------------
+// rosters[market] = { c: true, ... }   — one map per market
+// bathRoster is shared (Kappa is one crew across every market)
+var state = { market:'DC Metro', slot:'AM', leadFile:null, leadData:null,
+              priorFiles:[], origins:{},
+              rosters:{ 'DC Metro':{}, 'Hampton Roads':{}, 'Richmond':{} },
+              bathRoster:{},
+              result:null, manualPins:{} };
+
+// ---------------- file drops ----------------
+function wireDrop(key, handler){
+  var wrap = document.querySelector('[data-drop="'+key+'"]');
+  var input = wrap.querySelector('input[type=file]');
+  ['dragenter','dragover'].forEach(function(ev){
+    wrap.addEventListener(ev, function(e){ e.preventDefault(); wrap.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    wrap.addEventListener(ev, function(e){ e.preventDefault(); wrap.classList.remove('over'); });
+  });
+  wrap.addEventListener('drop', function(e){
+    var f = e.dataTransfer.files; if(f && f.length) handler(f);
+  });
+  input.addEventListener('change', function(){ if(input.files.length) handler(input.files); });
+}
+function chip(key, cls, text){
+  var c = $('#chip-'+key); c.className = 'chip ' + cls; c.textContent = text;
+}
+function nameOf(key, text){ $('#name-'+key).textContent = text; }
+
+function refFile(key, parser, label){
+  wireDrop(key, function(files){
+    var f = files[0];
+    chip(key, '', 'reading…'); nameOf(key, f.name);
+    readWorkbook(f).then(function(wb){
+      var data = parser(wb);
+      store.refs = store.refs || {};
+      store.refs[key] = data;
+      store.refs.stamp = store.refs.stamp || {};
+      store.refs.stamp[key] = { name: f.name, when: new Date().toISOString() };
+      if(store.refs.d60) store.refs.global60 = E.global60Of(store.refs.d60);
+      save(); refreshRefs(); buildRoster();
+    }).catch(function(err){
+      chip(key, 'no', 'error'); nameOf(key, err.message);
+      console.error(err);
+    });
+  });
+}
+
+function refreshRefs(){
+  ['rank','d60','homes'].forEach(function(k){
+    var st = store.refs && store.refs.stamp && store.refs.stamp[k];
+    if(store.refs && store.refs[k]){
+      var n = Object.keys(store.refs[k]).length;
+      chip(k, 'ok', n + ' reps');
+      nameOf(k, st ? st.name + ' · ' + new Date(st.when).toLocaleDateString() : '');
+    } else chip(k, 'no', 'none');
+  });
+  var ready = store.refs && store.refs.rank && store.refs.d60 && store.refs.homes;
+  var rs = $('#refState');
+  rs.className = 'chip ' + (ready ? 'ok' : 'no');
+  rs.textContent = ready ? 'reference data: loaded' : 'reference data: needed — open Setup';
+  if(!ready) $('#setupPanel').classList.remove('collapsed'), $('#setupToggle').setAttribute('aria-expanded','true'), $('#setupToggle').textContent = 'Close';
+  $('#geoCount').textContent = Object.keys(store.geo).length;
+  $('#hoCount').textContent = Object.keys(store.homeOverrides).length;
+  $('#aliasCount').textContent = Object.keys(store.aliases).length;
+  $('#prodCount').textContent = Object.keys(store.prodMap).length;
+  updateRun();
+}
+
+// ---------------- roster ----------------
+function homesAll(){
+  var h = Object.assign({}, (store.refs && store.refs.homes) || {});
+  var ali = aliasAll();
+  Object.keys(store.homeOverrides).forEach(function(k){ h[E.canon(k, ali)] = String(store.homeOverrides[k]).trim().toLowerCase(); });
+  return h;
+}
+function currentRoster(){
+  if(!state.rosters[state.market]) state.rosters[state.market] = {};
+  return state.rosters[state.market];
+}
+function repsForMarket(market){
+  var homes = homesAll();
+  if(!store.refs || !store.refs.rank) return [];
+  var wanted = E.TEAMS_BY_MARKET[market] || [];
+  var excl = (store.bottomExclude && store.bottomExclude[market]) || E.DEFAULT_BOTTOM_EXCLUDE[market] || [];
+  return Object.keys(store.refs.rank).filter(function(c){
+    if(!homes[c]) return false;
+    if(excl.indexOf(c) >= 0) return false;
+    var team = store.refs.rank[c].team;
+    return team ? wanted.indexOf(team) >= 0 : false;
+  }).sort();
+}
+function bathReps(){
+  var homes = homesAll();
+  if(!store.refs || !store.refs.rank) return [];
+  return Object.keys(store.refs.rank).filter(function(c){
+    return store.refs.rank[c].team === E.BATH_TEAM && homes[c];
+  }).sort();
+}
+function repRow(c, homes, checkedMap, onChange, extraHint){
+  var id = 'rep-' + c.replace(/[^a-z]/g,'') + '-' + Math.random().toString(36).slice(2,7);
+  var cb = el('input', { type:'checkbox', id:id });
+  cb.checked = !!checkedMap[c];
+  cb.addEventListener('change', function(){ checkedMap[c] = cb.checked; onChange(); });
+  var hint = extraHint || E.title(homes[c] ? homes[c].split('|')[0] : '?');
+  return el('label', { for:id }, [
+    cb,
+    el('span', { class:'nm', text: E.title(c) }),
+    el('span', { class:'hm', text: hint })
+  ]);
+}
+function buildRoster(){
+  var field = $('#reps'), bath = $('#bathReps');
+  field.innerHTML = ''; bath.innerHTML = '';
+  $('#marketLabel').textContent = state.market;
+  if(!store.refs || !store.refs.rank || !store.refs.homes){
+    field.appendChild(el('span', { class:'muted', text:'Upload the reference files above to build the rep list.' }));
+    bath.appendChild(el('span', { class:'muted', text:'—' }));
+    return;
+  }
+  var homes = homesAll();
+  var fieldNames = repsForMarket(state.market);
+  var roster = currentRoster();
+  if(!fieldNames.length){
+    field.appendChild(el('span', { class:'muted', text:'No reps found for ' + state.market + '. Check the Team column in the power ranking.' }));
+  } else {
+    fieldNames.forEach(function(c){ field.appendChild(repRow(c, homes, roster, updateRun)); });
+  }
+  var bathNames = bathReps();
+  if(!bathNames.length){
+    bath.appendChild(el('span', { class:'muted', text:'No Kappa reps on the power ranking.' }));
+  } else {
+    bathNames.forEach(function(c){ bath.appendChild(repRow(c, homes, state.bathRoster, updateRun, 'Kappa · ' + E.title((homes[c]||'?').split('|')[0]))); });
+  }
+  refreshPresets();
+  updateRun();
+}
+function rosterList(){
+  var r = currentRoster();
+  return Object.keys(r).filter(function(c){ return r[c]; });
+}
+function bathRosterList(){
+  return Object.keys(state.bathRoster).filter(function(c){ return state.bathRoster[c]; });
+}
+function updateRun(){
+  var n = rosterList().length, bn = bathRosterList().length;
+  $('#rosterCount').textContent = n ? '(' + n + ' checked)' : '';
+  $('#bathRosterCount').textContent = bn ? '(' + bn + ' checked)' : '';
+  var ready = !!(store.refs && store.refs.rank && store.refs.d60 && store.refs.homes && state.leadData && (n + bn));
+  $('#runBtn').disabled = !ready;
+  $('#runMsg').textContent = ready ? '' :
+    (!store.refs || !store.refs.rank ? 'reference files needed' :
+     !state.leadData ? 'add this shift’s lead sheet' :
+     !(n + bn) ? 'check at least one rep (field or bath)' : '');
+}
+
+// ---------------- presets (per-market) ----------------
+// store.presets is now { 'DC Metro': { name: [...] }, 'Hampton Roads': {...}, 'Richmond': {...} }
+function marketPresets(){
+  if(!store.presets[state.market]) store.presets[state.market] = {};
+  return store.presets[state.market];
+}
+function refreshPresets(){
+  var sel = $('#presetSel'), presets = marketPresets();
+  sel.innerHTML = '<option value="">Roster presets…</option>';
+  Object.keys(presets).sort().forEach(function(k){
+    sel.appendChild(el('option', { value:k, text:k + ' (' + presets[k].length + ')' }));
+  });
+}
+$('#presetSel').addEventListener('change', function(){
+  var k = this.value; if(!k) return;
+  var presets = marketPresets();
+  state.rosters[state.market] = {};
+  presets[k].forEach(function(c){ state.rosters[state.market][c] = true; });
+  buildRoster();
+});
+$('#presetSave').addEventListener('click', function(){
+  var list = rosterList();
+  if(!list.length){ alert('Check some reps first.'); return; }
+  var name = prompt('Name this ' + state.market + ' roster:', $('#presetSel').value || '');
+  if(!name) return;
+  marketPresets()[name.trim()] = list; save(); refreshPresets(); $('#presetSel').value = name.trim();
+});
+$('#presetDel').addEventListener('click', function(){
+  var k = $('#presetSel').value; if(!k) return;
+  if(!confirm('Delete ' + state.market + ' roster preset "' + k + '"?')) return;
+  delete marketPresets()[k]; save(); refreshPresets();
+});
+$('#rosterNone').addEventListener('click', function(){
+  state.rosters[state.market] = {}; state.bathRoster = {}; buildRoster();
+});
+
+// ---------------- market ----------------
+$$('#markets button').forEach(function(b){
+  b.addEventListener('click', function(){
+    state.market = b.dataset.market;
+    $$('#markets button').forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    buildRoster();
+  });
+});
+
+// ---------------- slot ----------------
+$$('#slots button').forEach(function(b){
+  b.addEventListener('click', function(){
+    state.slot = b.dataset.slot;
+    $$('#slots button').forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    $('#priorRow').hidden = state.slot === 'AM';
+    $('#priorHint').textContent = state.slot === 'PM' ? '— upload the AM board'
+      : state.slot === 'EVE' ? '— upload AM then PM (most recent last)' : '';
+  });
+});
+
+// ---------------- shift files ----------------
+wireDrop('leads', function(files){
+  var f = files[0];
+  state.leadFile = f;
+  chip('leads', '', 'reading…'); nameOf('leads', f.name);
+  readWorkbook(f).then(function(wb){
+    var d = parseLeads(wb);
+    state.leadData = d;
+    chip('leads', 'ok', d.rows.length + ' rows');
+    nameOf('leads', f.name + (d.sheetName !== LEAD_SHEET ? ' · read sheet "' + d.sheetName + '"' : ''));
+    updateRun();
+  }).catch(function(err){
+    state.leadData = null; chip('leads','no','error'); nameOf('leads', err.message); updateRun();
+  });
+});
+wireDrop('prior', function(files){
+  var list = Array.prototype.slice.call(files);
+  chip('prior', '', 'reading…');
+  state.origins = {};
+  var seq = Promise.resolve();
+  list.forEach(function(f){
+    seq = seq.then(function(){
+      return readWorkbook(f).then(function(wb){
+        var m = parsePriorBoard(wb);
+        Object.keys(m).forEach(function(k){ state.origins[k] = m[k]; });   // later file wins
+      });
+    });
+  });
+  seq.then(function(){
+    chip('prior', 'ok', Object.keys(state.origins).length + ' origins');
+    nameOf('prior', list.map(function(f){ return f.name; }).join(' → '));
+  }).catch(function(err){ chip('prior','no','error'); nameOf('prior', err.message); });
+});
+
+// ---------------- run ----------------
+$('#runBtn').addEventListener('click', function(){ doRun(); });
+$('#btnRerun').addEventListener('click', function(){ doRun(); });
+
+function doRun(){
+  var input = {
+    market: state.market,
+    slot: state.slot,
+    leads: state.leadData.rows,
+    fieldRoster: rosterList(),
+    bathRoster: bathRosterList(),
+    rank: store.refs.rank,
+    d60: store.refs.d60,
+    global60: store.refs.global60 || E.global60Of(store.refs.d60),
+    homes: homesAll(),
+    origins: state.slot === 'AM' ? {} : state.origins,
+    geo: geoAll(),
+    aliases: aliasAll(),
+    prodMap: prodAll(),
+    ceil: store.ceil[state.market],
+    floor: store.floor[state.market],
+    manualPins: state.manualPins
+  };
+  var r;
+  try { r = E.run(input); }
+  catch(err){ alert('Run failed: ' + err.message); console.error(err); return; }
+  state.result = r;
+  renderGeoForm(r.missingGeo);
+  renderResult(r);
+  $('#resultPanel').hidden = false;
+  $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ---------------- unknown cities ----------------
+function renderGeoForm(missing){
+  var panel = $('#geoPanel'), host = $('#geoForm');
+  host.innerHTML = '';
+  if(!missing.length){ panel.hidden = true; return; }
+  panel.hidden = false;
+  missing.forEach(function(city){
+    var lat = el('input', { type:'text', placeholder:'latitude', inputmode:'decimal' });
+    var lon = el('input', { type:'text', placeholder:'longitude', inputmode:'decimal' });
+    var msg = el('span', { class:'muted mono' });
+    var lookup = el('button', { class:'sm', onclick: function(){
+      msg.textContent = 'looking up…';
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city + ', DC Maryland Virginia USA'))
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(j && j.length){ lat.value = (+j[0].lat).toFixed(4); lon.value = (+j[0].lon).toFixed(4); msg.textContent = 'found — check it looks right'; }
+          else msg.textContent = 'no match — type it in';
+        })
+        .catch(function(){ msg.textContent = 'lookup unavailable — type it in'; });
+    }}, [document.createTextNode('Look up')]);
+    var saveBtn = el('button', { class:'sm primary', onclick: function(){
+      var a = parseFloat(lat.value), b = parseFloat(lon.value);
+      if(!isFinite(a) || !isFinite(b)){ msg.textContent = 'need both numbers'; return; }
+      store.geo[E.low(city)] = [a, b]; save(); refreshRefs();
+      msg.textContent = 'saved';
+      row.remove();
+      if(!$('#geoForm').children.length) $('#geoPanel').hidden = true;
+    }}, [document.createTextNode('Save')]);
+    var row = el('div', { class:'row', style:'align-items:center;margin-bottom:8px' }, [
+      el('b', { text: E.title(city), style:'min-width:150px' }),
+      el('div', { class:'col', style:'width:120px' }, [lat]),
+      el('div', { class:'col', style:'width:120px' }, [lon]),
+      lookup, saveBtn, msg
+    ]);
+    host.appendChild(row);
+  });
+  host.appendChild(el('p', { class:'muted', style:'margin:4px 0 0;font-size:12px',
+    text:'Saved here forever, on this browser. Look up uses OpenStreetMap (sends only the city name); typing coordinates works with no network at all.' }));
+}
+
+// ---------------- results ----------------
+var sortState = { key:null, dir:1 };
+function renderResult(r){
+  var s = $('#summary'); s.innerHTML = '';
+  function stat(n, label){ s.appendChild(el('div', { class:'stat' }, [ el('b',{text:String(n)}), el('span',{text:label}) ])); }
+  stat(r.counts.assigned, 'assigned');
+  stat(r.counts.unfilled, 'unfilled');
+  stat(r.counts.pinned, 'pinned');
+  stat(r.counts.skipped, 'skipped');
+  stat(r.counts.bench, 'bench');
+  if(r.bathRows.length || r.counts.bathAssigned || r.counts.bathBench){
+    stat(r.counts.bathAssigned, 'bath');
+    if(r.counts.bathOverflow) stat(r.counts.bathOverflow, 'bath overflow');
+    if(r.counts.bathUnfilled) stat(r.counts.bathUnfilled, 'bath unfilled');
+  }
+  var sk = r.skips;
+  s.appendChild(el('span', { class:'muted', style:'font-size:12px', text:
+    r.market + ' · skips: ' + sk.cancelled + ' cancelled · ' + sk.open + ' open · ' + sk.campaign +
+    ' install consultant · ' + sk.bath + ' routed to bath · ' + sk.market + ' other market · ' +
+    'drive cap ' + r.ceil + 'm, BIG floor $' + r.floor.toLocaleString('en-US') }));
+
+  var fb = $('#flagBox'); fb.innerHTML = '';
+  function notice(cls, title, items){
+    var ul = el('ul');
+    items.forEach(function(t){ ul.appendChild(el('li', { text:t })); });
+    fb.appendChild(el('div', { class:'notice ' + cls }, [ el('b',{text:title}), ul ]));
+  }
+  if(r.missingGeo.length) notice('bad', 'Cities with no coordinates — these can’t be assigned:', [r.missingGeo.map(E.title).join(', ')]);
+  if(r.stateFallbacks && r.stateFallbacks.length) notice('warn',
+    'City matched with a different state — verify the coordinates:',
+    r.stateFallbacks.map(function(sf){ return E.title(sf.city) + ' (asked for ' + sf.requestedState.toUpperCase() + ', matched ' + sf.matchedState.toUpperCase() + ')'; }));
+  if(r.missingData.length) notice('warn', 'Checked reps with no ranking or home data — left out:', [r.missingData.map(E.title).join(', ')]);
+  if(r.wrongTeamField && r.wrongTeamField.length) notice('warn',
+    'Field-roster reps skipped for team mismatch:',
+    r.wrongTeamField.map(function(w){ return E.title(w.rep) + ' — ' + w.reason; }));
+  if(r.wrongTeamBath && r.wrongTeamBath.length) notice('warn',
+    'Bath-roster reps skipped (not on Kappa):',
+    r.wrongTeamBath.map(function(w){ return E.title(w.rep) + ' — ' + w.reason; }));
+  if(r.unknownProducts.length) notice('warn', 'Unknown product codes — scored as Windows:', [r.unknownProducts.join(', ') + ' — add a mapping in Setup › Product mappings.']);
+  var longDrives = r.rows.concat(r.bathRows).filter(function(x){ return x.drive !== null && x.drive > 75; });
+  if(longDrives.length) notice('warn', 'Long drives — the origin is why:',
+    longDrives.map(function(x){ return x.rep.disp + ' → ' + x.lead['City'] + ' (' + x.drive + 'm from ' + x.origin + ')'; }));
+  var unf = r.rows.concat(r.bathRows).filter(function(x){ return !x.rep; });
+  if(unf.length) notice('bad', 'Unfilled leads:', unf.map(function(x){ return (x.lead['Customer Name']||'?') + ' — ' + x.flags[0]; }));
+  if(r.overflowUsed) notice('warn', 'Bath overflow pulled from the field bench:',
+    r.bathRows.filter(function(x){ return x.overflow; }).map(function(x){ return x.rep.disp + ' → ' + x.lead['Customer Name'] + ' (' + x.lead['City'] + ')'; }));
+
+  var cols = [
+    { k:'cust',  t:'Customer', v:function(x){ return String(x.lead['Customer Name']||''); } },
+    { k:'city',  t:'City',     v:function(x){ return String(x.lead['City']||''); } },
+    { k:'tier',  t:'Tier',     v:function(x){ return x.tier; } },
+    { k:'opp',   t:'Opportunity', v:function(x){ return x.opp; } },
+    { k:'rep',   t:'Rep',      v:function(x){ return x.rep ? x.rep.disp : ''; } },
+    { k:'origin',t:'Origin',   v:function(x){ return x.origin || ''; } },
+    { k:'drive', t:'Drive',    v:function(x){ return x.drive; }, num:true },
+    { k:'eff',   t:'Eff. NSLI',v:function(x){ return x.eff; }, num:true },
+    { k:'pin',   t:'Pin',      v:function(){ return ''; } },
+    { k:'flags', t:'Flags',    v:function(x){ return x.flags.join('; '); } }
+  ];
+  var thead = $('#board thead'); thead.innerHTML = '';
+  var tr = el('tr');
+  cols.forEach(function(c){
+    var th = el('th', { text:c.t, tabindex:'0' });
+    if(sortState.key === c.k) th.setAttribute('aria-sort', sortState.dir>0 ? 'ascending':'descending');
+    var doSort = function(){
+      sortState.dir = sortState.key === c.k ? -sortState.dir : 1;
+      sortState.key = c.k; renderResult(r);
+    };
+    th.addEventListener('click', doSort);
+    th.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); doSort(); } });
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
+
+  var rows = r.rows.slice();
+  if(sortState.key){
+    var c = cols.filter(function(x){ return x.k === sortState.key; })[0];
+    rows.sort(function(a,b){
+      var x = c.v(a), y = c.v(b);
+      if(x === null || x === '') return 1;
+      if(y === null || y === '') return -1;
+      if(c.num) return (x-y)*sortState.dir;
+      return String(x).localeCompare(String(y))*sortState.dir;
+    });
+  }
+
+  var tb = $('#board tbody'); tb.innerHTML = '';
+  rows.forEach(function(x){
+    var tr = el('tr', { class:x.state });
+    cols.forEach(function(c){
+      if(c.k === 'pin'){
+        var sel = el('select');
+        sel.appendChild(el('option', { value:'', text:'—' }));
+        r.avail.forEach(function(a){
+          var o = el('option', { value:a.c, text:a.disp });
+          if(state.manualPins[x.i] === a.c) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', function(){
+          if(sel.value) state.manualPins[x.i] = sel.value; else delete state.manualPins[x.i];
+          $('#btnRerun').classList.add('primary');
+        });
+        tr.appendChild(el('td', {}, [sel]));
+        return;
+      }
+      var v = c.v(x);
+      var td = el('td', { class: (c.num?'num ':'') + (c.k==='flags'?'flags':'') });
+      td.textContent = v === null || v === undefined ? '' : String(v);
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+
+  if(r.bench.length){
+    var head = el('tr', { class:'bench' });
+    head.appendChild(el('td', { colspan:String(cols.length),
+      text:'ON THE BENCH — ' + r.bench.length + ' reps, no lead today (by 60-day volume)',
+      style:'font-weight:700' }));
+    tb.appendChild(head);
+    r.bench.forEach(function(b){
+      var tr2 = el('tr', { class:'bench' });
+      tr2.appendChild(el('td', { text:b.disp }));
+      tr2.appendChild(el('td', { text:E.title((b.origin||'').split('|')[0]) }));
+      tr2.appendChild(el('td', { colspan:String(cols.length-2),
+        text: b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '' }));
+      tb.appendChild(tr2);
+    });
+  }
+
+  if(r.bathRows.length){
+    var bhead = el('tr', { class:'bench' });
+    bhead.appendChild(el('td', { colspan:String(cols.length),
+      text:'BATH BOARD — ' + r.bathRows.length + ' lead(s), Kappa-first with field overflow',
+      style:'font-weight:700;background:var(--pin)' }));
+    tb.appendChild(bhead);
+    r.bathRows.forEach(function(x){
+      var tr = el('tr', { class: x.overflow ? 'warn' : (x.state || '') });
+      cols.forEach(function(c){
+        if(c.k === 'pin'){ tr.appendChild(el('td', { text:'' })); return; }
+        var v = c.v(x);
+        var td = el('td', { class: (c.num?'num ':'') + (c.k==='flags'?'flags':'') });
+        td.textContent = v === null || v === undefined ? '' : String(v);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    if(r.bathBench.length){
+      var bb = el('tr', { class:'bench' });
+      bb.appendChild(el('td', { colspan:String(cols.length),
+        text:'Bath bench: ' + r.bathBench.map(function(b){ return b.disp + (b.vol ? ' ($'+Math.round(b.vol/1000)+'K)' : ''); }).join(', ') }));
+      tb.appendChild(bb);
+    }
+  }
+}
+
+// ---------------- xlsx output ----------------
+var FILL = {
+  hdr:'FF1F4E78', big:'FFE2EFDA', warn:'FFFFF2CC', bad:'FFF8CBAD', pin:'FFD9E1F2', bench:'FFF2F2F2'
+};
+function solid(argb){ return { type:'pattern', pattern:'solid', fgColor:{ argb:argb } }; }
+var THIN = { style:'thin', color:{ argb:'FF808080' } };
+var BORDER = { top:THIN, left:THIN, bottom:THIN, right:THIN };
+
+$('#btnXlsx').addEventListener('click', function(){
+  if(!state.result || !state.leadFile) return;
+  var btn = this, old = btn.textContent; btn.textContent = 'building…'; btn.disabled = true;
+  buildXlsx().then(function(){ btn.textContent = old; btn.disabled = false; })
+    .catch(function(e){ alert('Could not build the file: ' + e.message); console.error(e); btn.textContent = old; btn.disabled = false; });
+});
+
+// Builds the board as a fresh workbook: same columns as the SAP export, in the same
+// order, minus the skipped rows, plus the six helper columns. (We can't mutate the
+// uploaded file in place — ExcelJS can't read it back reliably.)
+function buildXlsx(){
+  var r = state.result, ld = state.leadData;
+  return Promise.resolve().then(function(){
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet(ld.sheetName || LEAD_SHEET);
+    var hdr = ld.hdr.filter(Boolean);
+    var spCol = hdr.indexOf('Service Provider') + 1;
+    var custCol = hdr.indexOf('Customer Name') + 1;
+    var notesCol = hdr.indexOf('Notes') + 1;
+    if(!spCol) throw new Error('Lead sheet has no "Service Provider" column.');
+    var base = hdr.length;
+    var extra = ['Tier','Opportunity','Rep Home','Est Drive (min)','Eff. NSLI ($)','Assignment Flag'];
+    var lastCol = base + extra.length;
+
+    // header
+    var head = ws.addRow(hdr.concat(extra));
+    head.height = 30;
+    for(var c = 1; c <= lastCol; c++){
+      var hc = head.getCell(c);
+      hc.fill = solid(FILL.hdr);
+      hc.font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+      hc.alignment = { horizontal:'center', wrapText:true };
+    }
+
+    // one row per surviving lead, original order (r.rows is already sorted by source row)
+    r.rows.forEach(function(x){
+      var vals = hdr.map(function(h){
+        if(h === 'Service Provider') return x.rep ? x.rep.disp : null;   // SAP placeholders dropped
+        var v = x.lead[h];
+        return v === undefined ? null : v;
+      });
+      vals = vals.concat([
+        x.tier, x.opp,
+        x.rep ? x.origin : null,
+        x.drive === null ? null : x.drive,
+        x.eff === null ? null : x.eff,
+        x.flags.join('; ')
+      ]);
+      var row = ws.addRow(vals);
+      var f = x.state === 'pin' ? FILL.pin : x.state === 'bad' ? FILL.bad
+            : x.state === 'warn' ? FILL.warn : x.state === 'big' ? FILL.big : null;
+      if(f) for(var k = 1; k <= lastCol; k++) row.getCell(k).fill = solid(f);
+    });
+
+    var lastLeadRow = ws.rowCount;
+    ws.autoFilter = { from:{ row:1, column:1 }, to:{ row:lastLeadRow, column:lastCol } };
+    ws.views = [{ state:'frozen', ySplit:1 }];
+
+    // preserve date formatting from the source export
+    Object.keys(ld.fmt).forEach(function(h){
+      var idx = hdr.indexOf(h) + 1;
+      if(idx) ws.getColumn(idx).numFmt = ld.fmt[h];
+    });
+
+    // BENCH block, after a blank row
+    var r0 = lastLeadRow + 2;
+    var brow = ws.getRow(r0);
+    brow.getCell(custCol || 1).value = 'ON THE BENCH — ' + r.bench.length + ' reps, no lead today (by 60-day volume)';
+    brow.getCell(custCol || 1).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+    brow.getCell(spCol).value = 'Rep';
+    brow.getCell(spCol).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+    brow.getCell(base+3).value = 'Home';
+    brow.getCell(base+3).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+    [custCol || 1, spCol, base+3, base+6].forEach(function(k){ brow.getCell(k).fill = solid(FILL.hdr); });
+    brow.commit && brow.commit();
+    r.bench.forEach(function(b, n){
+      var row = ws.getRow(r0+1+n);
+      row.getCell(spCol).value = b.disp;
+      row.getCell(base+3).value = E.title((b.origin||'').split('|')[0]);
+      row.getCell(base+6).value = b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '';
+      [spCol, base+3, base+6].forEach(function(k){ row.getCell(k).fill = solid(FILL.bench); });
+    });
+
+    // BATH BOARD section (Kappa-first with field overflow). Kept together in one file
+    // for handoff; overflow rows are yellow so the bath crew sees what came from field.
+    if(r.bathRows.length){
+      var br0 = ws.rowCount + 2;
+      var bhdr = ws.getRow(br0);
+      bhdr.getCell(custCol || 1).value = 'BATH BOARD — ' + r.bathRows.length + ' lead(s) (Kappa-first, then field overflow)';
+      bhdr.getCell(custCol || 1).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+      for(var bc = 1; bc <= lastCol; bc++) bhdr.getCell(bc).fill = solid(FILL.pin);
+      bhdr.getCell(custCol || 1).fill = solid(FILL.hdr);
+      // sub-header row with column labels
+      var bhdr2 = ws.getRow(br0 + 1);
+      hdr.forEach(function(h, i){ bhdr2.getCell(i+1).value = h; });
+      extra.forEach(function(h, j){ bhdr2.getCell(base+1+j).value = h; });
+      for(var bc2 = 1; bc2 <= lastCol; bc2++){
+        bhdr2.getCell(bc2).fill = solid(FILL.hdr);
+        bhdr2.getCell(bc2).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+        bhdr2.getCell(bc2).alignment = { horizontal:'center', wrapText:true };
+      }
+      r.bathRows.forEach(function(x, n){
+        var row = ws.getRow(br0 + 2 + n);
+        hdr.forEach(function(h, i){
+          if(h === 'Service Provider'){ row.getCell(i+1).value = x.rep ? x.rep.disp : null; return; }
+          var v = x.lead[h]; row.getCell(i+1).value = v === undefined ? null : v;
+        });
+        row.getCell(base+1).value = x.tier;
+        row.getCell(base+2).value = x.opp;
+        row.getCell(base+3).value = x.rep ? x.origin : null;
+        row.getCell(base+4).value = x.drive === null ? null : x.drive;
+        row.getCell(base+5).value = x.eff === null ? null : x.eff;
+        row.getCell(base+6).value = x.flags.join('; ');
+        var fill = x.overflow ? FILL.warn : (!x.rep ? FILL.bad : FILL.pin);
+        for(var k = 1; k <= lastCol; k++) row.getCell(k).fill = solid(fill);
+      });
+    }
+
+    // borders on every used cell
+    for(var rn = 1; rn <= ws.rowCount; rn++){
+      var row2 = ws.getRow(rn);
+      for(var c2 = 1; c2 <= lastCol; c2++) row2.getCell(c2).border = BORDER;
+    }
+    // auto-fit widths: content + 2, capped at 34 — Notes and Assignment Flag capped at 55 with wrap
+    var wrapCols = [notesCol || -1, lastCol];
+    for(var col = 1; col <= lastCol; col++){
+      var mx = 0;
+      for(var rn2 = 1; rn2 <= ws.rowCount; rn2++){
+        var v = ws.getRow(rn2).getCell(col).value;
+        if(v === null || v === undefined) continue;
+        var txt = (v instanceof Date) ? String(ld.fmt[hdr[col-1]] || 'm/d/yyyy h:mm') : String(v);
+        txt.split('\n').forEach(function(line){ mx = Math.max(mx, line.length); });
+      }
+      var cap = wrapCols.indexOf(col) >= 0 ? 55 : 34;
+      ws.getColumn(col).width = Math.min(Math.max(mx+2, 9), cap);
+      if(wrapCols.indexOf(col) >= 0){
+        for(var rn3 = 2; rn3 <= ws.rowCount; rn3++){
+          var cc = ws.getRow(rn3).getCell(col);
+          if(cc.value !== null && cc.value !== undefined) cc.alignment = { wrapText:true, vertical:'top' };
+        }
+      }
+    }
+
+    return wb.xlsx.writeBuffer().then(function(buf){
+      var d = new Date(), pad = function(n){ return String(n).padStart(2,'0'); };
+      var marketTag = state.market === 'DC Metro' ? '' : ('_' + state.market.replace(/\s+/g,''));
+      var fn = pad(d.getMonth()+1) + '_' + pad(d.getDate()) + '_' + state.slot + marketTag + '_LEADS_ASSIGNED.xlsx';
+      var blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var url = URL.createObjectURL(blob);
+      var a = el('a', { href:url, download:fn });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    });
+  });
+}
+
+// ---------------- editors (geo / aliases / overrides / products) ----------------
+function keyValEditor(title, obj, opts){
+  var host = $('#editorHost'); host.innerHTML = '';
+  var box = el('section', { class:'panel' });
+  var body = el('div', { class:'body' });
+  box.appendChild(el('div', { class:'head' }, [
+    el('h2', { text:title }),
+    el('span', { class:'spacer' }),
+    el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
+  ]));
+  var list = el('div', { class:'scroll' });
+  function redraw(){
+    list.innerHTML = '';
+    var keys = Object.keys(obj).sort();
+    if(!keys.length) list.appendChild(el('span', { class:'muted', text:'nothing saved yet — defaults are built in' }));
+    keys.forEach(function(k){
+      list.appendChild(el('div', { class:'kv' }, [
+        el('span', { class:'k', text:k }),
+        el('span', { class:'mono', text: opts.fmt(obj[k]) }),
+        el('button', { class:'sm danger', text:'Remove', onclick:function(){ delete obj[k]; save(); redraw(); refreshRefs(); buildRoster(); } })
+      ]));
+    });
+  }
+  redraw();
+  var kIn = el('input', { type:'text', placeholder:opts.kph });
+  var vIn = el('input', { type:'text', placeholder:opts.vph });
+  var addBtn = el('button', { class:'sm primary', text:'Add / update', onclick:function(){
+    var raw = kIn.value, v = opts.parse(vIn.value);
+    var k = opts.validateKey ? opts.validateKey(raw) : E.low(raw);
+    if(!k || v === null){ alert(opts.validateKey && !k ? ('Key must match: ' + opts.kph) : 'Check both boxes.'); return; }
+    obj[opts.rawKey ? (opts.validateKey ? k : raw.trim()) : k] = v; save(); redraw(); refreshRefs(); buildRoster();
+    kIn.value = ''; vIn.value = '';
+  }});
+  body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px', text:opts.help }));
+  body.appendChild(list);
+  body.appendChild(el('div', { class:'row' }, [
+    el('div', { class:'col grow' }, [ kIn ]),
+    el('div', { class:'col grow' }, [ vIn ]),
+    addBtn
+  ]));
+  box.appendChild(body);
+  host.appendChild(box);
+  box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+$('#btnGeo').addEventListener('click', function(){
+  keyValEditor('City coordinates you’ve added', store.geo, {
+    rawKey:true,
+    help:'~210 DMV + Hampton Roads + Richmond cities are built in. Extras save here. Keys must be "city|state" (e.g. "broadlands|va").',
+    kph:'city|state (e.g. broadlands|va)', vph:'38.9072, -77.0369',
+    fmt:function(v){ return v[0] + ', ' + v[1]; },
+    parse:function(s){ var p = s.split(',').map(function(x){ return parseFloat(x); });
+      return (p.length===2 && isFinite(p[0]) && isFinite(p[1])) ? p : null; },
+    validateKey:function(k){
+      var s = k.trim().toLowerCase();
+      return /^[a-z][a-z .\-]*\|[a-z]{2}$/.test(s) ? s : null;
+    }
+  });
+});
+$('#btnHomeOv').addEventListener('click', function(){
+  keyValEditor('Home overrides', store.homeOverrides, {
+    help:'For reps not yet in the phone-list export, or whose listed home is wrong. Format the home as "city|state".',
+    kph:'rep name (e.g. jacob szczepanik)', vph:'home city|state (e.g. crofton|md)',
+    fmt:function(v){ return String(v); },
+    parse:function(s){
+      s = s.trim().toLowerCase();
+      if(!s) return null;
+      if(s.indexOf('|') < 0) s += '|md';   // sensible default if user forgets
+      return s;
+    }
+  });
+});
+$('#btnAlias').addEventListener('click', function(){
+  keyValEditor('Name aliases you’ve added', store.aliases, {
+    help:'Maps a loose spelling to the canonical name. ~25 are built in; these are your extras. Used for prior boards and note-pins.',
+    kph:'as written (e.g. frank hill)', vph:'canonical (e.g. franklin hill)',
+    fmt:function(v){ return '→ ' + v; },
+    parse:function(s){ return s.trim() ? s.trim().toLowerCase() : null; }
+  });
+});
+$('#btnCaps').addEventListener('click', function(){
+  var host = $('#editorHost'); host.innerHTML = '';
+  var box = el('section', { class:'panel' });
+  var body = el('div', { class:'body' });
+  box.appendChild(el('div', { class:'head' }, [
+    el('h2', { text:'Per-market drive cap and BIG floor' }),
+    el('span', { class:'spacer' }),
+    el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
+  ]));
+  body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
+    text:'Drive cap (minutes) beyond which a rep can\'t be assigned to a lead. BIG floor is the minimum Eff. NSLI to be eligible for a BIG lead. Defaults are 120 min / $5,000. Leave a box empty to use the default.' }));
+  E.MARKETS.forEach(function(m){
+    var ceilIn = el('input', { type:'number', min:'30', max:'240', step:'5',
+      value: store.ceil[m] != null ? String(store.ceil[m]) : '', placeholder:String(E.DEFAULT_CEIL[m]||120) });
+    var floorIn = el('input', { type:'number', min:'0', step:'250',
+      value: store.floor[m] != null ? String(store.floor[m]) : '', placeholder:String(E.DEFAULT_FLOOR[m]||5000) });
+    body.appendChild(el('div', { class:'row', style:'align-items:center' }, [
+      el('b', { text:m, style:'min-width:140px' }),
+      el('span', { class:'lbl', text:'Cap (min)' }), el('div', { class:'col', style:'width:110px' }, [ceilIn]),
+      el('span', { class:'lbl', text:'Floor ($)' }), el('div', { class:'col', style:'width:130px' }, [floorIn]),
+      el('button', { class:'sm primary', text:'Save', onclick:function(){
+        var c = parseFloat(ceilIn.value), f = parseFloat(floorIn.value);
+        if(isFinite(c) && c > 0) store.ceil[m] = c; else delete store.ceil[m];
+        if(isFinite(f) && f >= 0) store.floor[m] = f; else delete store.floor[m];
+        save();
+      }})
+    ]));
+  });
+  box.appendChild(body); host.appendChild(box);
+  box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+});
+$('#btnProd').addEventListener('click', function(){
+  keyValEditor('Product mappings you’ve added', store.prodMap, {
+    rawKey:true,
+    help:'Maps a product code to the scoring columns. Valid components: Windows, Doors, Siding, Gutters, Roofing. Combo letters: W D G S R. Unmapped codes score as Windows and get flagged.',
+    kph:'product code (e.g. COMBO_SID_WIN_GUT)', vph:'Siding, Windows, Gutters',
+    fmt:function(v){ return v.join(', '); },
+    parse:function(s){
+      var p = s.split(',').map(function(x){ return x.trim(); })
+        .map(function(x){ return E.PRODUCTS.filter(function(q){ return q.toLowerCase() === x.toLowerCase(); })[0]; });
+      return (p.length && p.every(Boolean)) ? p : null;
+    }
+  });
+});
+
+// ---------------- settings backup ----------------
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','ceil','floor','bottomExclude'];
+$('#btnExport').addEventListener('click', function(){
+  var out = { version:2, exported:new Date().toISOString() };
+  BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
+  var blob = new Blob([JSON.stringify(out, null, 2)], { type:'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = el('a', { href:url, download:'lead-engine-settings.json' });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+});
+$('#btnImport').addEventListener('click', function(){ $('#importFile').click(); });
+$('#importFile').addEventListener('change', function(){
+  var f = this.files[0]; if(!f) return;
+  f.text().then(function(t){
+    var o = JSON.parse(t);
+    BACKUP_FIELDS.forEach(function(k){
+      if(o[k]) Object.keys(o[k]).forEach(function(x){ store[k][x] = o[k][x]; });
+    });
+    save(); refreshRefs(); refreshPresets(); buildRoster();
+    alert('Settings restored. Your reference spreadsheets are not part of this file — re-upload those if this is a new device.');
+  }).catch(function(e){ alert('That file didn’t read as settings JSON: ' + e.message); });
+  this.value = '';
+});
+$('#btnWipe').addEventListener('click', function(){
+  if(!confirm('Clear cached reference data, saved cities, aliases and presets from this browser?')) return;
+  localStorage.removeItem(KEY);
+  localStorage.removeItem(OLD_KEY);
+  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{} };
+  load(); refreshRefs(); refreshPresets(); buildRoster();
+});
+
+// ---------------- setup toggle ----------------
+$('#setupToggle').addEventListener('click', function(){
+  var p = $('#setupPanel'), open = p.classList.toggle('collapsed');
+  this.setAttribute('aria-expanded', String(!open));
+  this.textContent = open ? 'Open' : 'Close';
+});
+
+// ---------------- boot ----------------
+refFile('rank', parseRank);
+refFile('d60', parse60);
+refFile('homes', parseHomes);
+load(); refreshRefs(); refreshPresets(); buildRoster();
+})();
+</script>
+</body>
+</html>
+
 }
 @media (prefers-color-scheme:dark){
   :root{
