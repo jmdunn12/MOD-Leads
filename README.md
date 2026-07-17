@@ -139,6 +139,8 @@ If the call center starts using a new abbreviation, tell me what it means and I'
 
 Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
 
+**Storm doors alone are always SMALL.** If storm doors are the only product in the notes — any count, no windows, no other door types, no siding/roof/gutter, and not a combo product code — the lead tiers SMALL regardless of how many ("3 storm doors" used to tier BIG). Anything else on the job voids this and normal rules apply.
+
 ## When something new shows up
 
 - **New city** — the app catches it and shows a small form row for each unknown city (with its state). Two ways to get coordinates:

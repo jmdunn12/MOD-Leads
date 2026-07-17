@@ -826,16 +826,23 @@ function describeLead(lead, prodMap){
   var known = !!((prodMap && prodMap[prod]) || PRODC[prod]);
   var tk = prodTokens(prod);
   var inTk = function(x){ return tk.indexOf(x)>=0; };
+  var sid  = comps.indexOf('Siding')>=0  || /\bsiding/.test(raw) || pu.indexOf('SIDING')>=0 || inTk('S') || inTk('SID');
+  var roof = comps.indexOf('Roofing')>=0 || /\broof/.test(raw)   || pu.indexOf('ROOF')>=0   || inTk('R');
+  var gut  = comps.indexOf('Gutters')>=0 || /\bgutter/.test(raw) || pu.indexOf('GUTTER')>=0 || inTk('G') || inTk('GUT');
   var tier = tierOf(prod, w, wk, d, dt, prodMap);
   var rfloor = windowRangeFloor(wranges);
   if(rfloor && TIER_RANK[rfloor] > TIER_RANK[tier]) tier = rfloor;
+  // Manager rule (2026-07-17): storm doors as the ONLY product in the notes are
+  // SMALL regardless of count — no windows, no other door types, no siding/roof/
+  // gutter, and not a combo product code (a combo means more is on the job).
+  var stormOnly = d > 0 && dt.length === 1 && dt[0] === 'storm' && w === 0 &&
+                  !sid && !roof && !gut && pu.indexOf('BATH') < 0 && pu.indexOf('COMBO') !== 0;
+  if(stormOnly) tier = 'SMALL';
   return {
     comps: comps, knownProduct: known, prod: prod, w: w, d: d, dtypes: dt,
     tier: tier,
     city: String(lead['City']||'').trim(),
-    sid:  comps.indexOf('Siding')>=0  || /\bsiding/.test(raw) || pu.indexOf('SIDING')>=0 || inTk('S') || inTk('SID'),
-    roof: comps.indexOf('Roofing')>=0 || /\broof/.test(raw)   || pu.indexOf('ROOF')>=0   || inTk('R'),
-    gut:  comps.indexOf('Gutters')>=0 || /\bgutter/.test(raw) || pu.indexOf('GUTTER')>=0 || inTk('G') || inTk('GUT'),
+    sid: sid, roof: roof, gut: gut,
     bath: pu.indexOf('BATH')>=0,
     resched: /resched/.test(raw)
   };

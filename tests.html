@@ -272,6 +272,30 @@ function runAll(E){
     eq('windowRangeFloor null for unlisted ranges', E.windowRangeFloor([[6,8],[2,3]]), null);
   })();
 
+  group('Storm-doors-only leads are SMALL (rule 2026-07-17)');
+  (function(){
+    function tf(notes, prod){ return E.describeLead(mkLead({ Product: prod || 'DOORS', Notes: notes }), null); }
+    eq('"1 storm door" → SMALL (as before)', tf('1 storm door').tier, 'SMALL');
+    eq('"2 storms" → SMALL (was MEDIUM)', tf('2 storms').tier, 'SMALL');
+    eq('"3 storm doors" → SMALL (was BIG)', tf('3 storm doors').tier, 'SMALL');
+    eq('"5 storm doors" → SMALL', tf('5 storm doors').tier, 'SMALL');
+    eq('"2-sd" shorthand → SMALL', tf('sfh, 2-sd').tier, 'SMALL');
+    eq('bare "sd" → SMALL', tf('so, sd').tier, 'SMALL');
+    eq('…count is still reported honestly', tf('3 storm doors').d, 3);
+    // anything else on the job voids the rule
+    eq('storm + front entry → normal rules (2 doors, MEDIUM)', tf('1 storm door and 1 fed').tier, 'MEDIUM');
+    eq('storm + sliding + front → 3 doors, BIG', tf('1 sgd, 1 storm, 1 fe').tier, 'BIG');
+    eq('storms + windows → normal rules (3 doors, BIG)', tf('3 storm doors and 4 windows').tier, 'BIG');
+    eq('storms + roof mention → MEDIUM (roof rule)', tf('2 storm doors, roof quote too').tier, 'MEDIUM');
+    // Siding in NOTES blocks the storm-only downgrade, but tier promotion to BIG
+    // requires siding in the product CODE — parity with lead_engine.py.
+    eq('storms + siding mention → downgrade voided, normal 2-door MEDIUM', tf('2 storms, siding on back').tier, 'MEDIUM');
+    eq('storms + SIDING product code → BIG as always', tf('2 storms', 'COMBO_SIDING_DOOR').tier, 'BIG');
+    eq('generic "3 doors" (untyped) stays BIG', tf('3 doors').tier, 'BIG');
+    eq('combo product code voids it (window-combo floor holds)',
+      tf('2 storms', 'COMBO_WIND_DOOR').tier, 'MEDIUM');
+  })();
+
   // ---------- 3. Hungarian ----------
   group('Hungarian / assignment solver');
   (function(){
