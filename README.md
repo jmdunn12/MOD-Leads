@@ -128,6 +128,17 @@ These show up in the Notes field from the call center. The counting ones feed th
 
 If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
 
+**Window ranges set a tier floor** (they can raise a lead's tier, never lower it):
+
+| Notes say | Tier floor |
+|---|---|
+| `3-5 windows` (also "3 to 5") | **BIG** |
+| `3-4 windows` | MEDIUM |
+| `2-5 windows` | MEDIUM |
+| any other range (`6-8`, `2-3`, …) | no floor — tiers by the max count as before |
+
+Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
+
 ## When something new shows up
 
 - **New city** — the app catches it and shows a small form row for each unknown city (with its state). Two ways to get coordinates:

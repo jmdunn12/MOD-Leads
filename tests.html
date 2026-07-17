@@ -247,6 +247,31 @@ function runAll(E){
   eq('5 standalone windows → SMALL', E.tierOf('WINDOWS', 5, true, 0, []), 'SMALL');
   eq('single storm door → SMALL', E.tierOf('DOORS', 0, false, 1, ['storm']), 'SMALL');
 
+  group('Window-range tier floors (rules 2026-07-17)');
+  (function(){
+    function tf(notes, prod){ return E.describeLead(mkLead({ Product: prod || 'WINDOWS', Notes: notes }), null); }
+    var a = tf('3-5 windows');
+    eq('"3-5 windows" → BIG', a.tier, 'BIG');
+    eq('…count still takes the max (5)', a.w, 5);
+    eq('"3-4 windows" → MEDIUM', tf('3-4 windows').tier, 'MEDIUM');
+    eq('"2-5 windows" → MEDIUM', tf('2-5 windows').tier, 'MEDIUM');
+    eq('"3 to 5 windows" (worded separator) → BIG', tf('needs 3 to 5 windows').tier, 'BIG');
+    eq('"three to five windows" (word numbers) → BIG', tf('three to five windows').tier, 'BIG');
+    eq('bare "3-5" on a WINDOWS lead → BIG via fallback', tf('sfh, quote 3-5 of them').tier, 'BIG');
+    eq('"6-8 windows" unchanged → BIG from count (8)', tf('6-8 windows').tier, 'BIG');
+    eq('"4-6 windows" not a special range → MEDIUM from w=6', tf('4-6 windows').tier, 'MEDIUM');
+    eq('"2-3 windows" not a special range → SMALL from w=3', tf('2-3 windows').tier, 'SMALL');
+    ok('floor never downgrades: "3-4 windows" + siding stays BIG',
+      tf('3-4 windows', 'SIDING').tier === 'BIG');
+    // time-of-day ranges must not trigger the floor or pollute counts
+    var t = tf('arrive 3-5pm, replace 6 windows');
+    eq('"3-5pm" is a time — tier stays MEDIUM from 6 windows', t.tier, 'MEDIUM');
+    eq('…and the count is 6, not 5', t.w, 6);
+    // helper directly
+    eq('windowRangeFloor picks the strongest floor', E.windowRangeFloor([[3,4],[3,5]]), 'BIG');
+    eq('windowRangeFloor null for unlisted ranges', E.windowRangeFloor([[6,8],[2,3]]), null);
+  })();
+
   // ---------- 3. Hungarian ----------
   group('Hungarian / assignment solver');
   (function(){

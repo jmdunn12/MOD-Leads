@@ -514,9 +514,13 @@ function all(re, s){ var out=[], m, r=new RegExp(re.source, re.flags.indexOf('g'
   while((m=r.exec(s))!==null){ out.push(m); if(m.index===r.lastIndex) r.lastIndex++; } return out; }
 
 function parseWindows(s){
-  var nums=[], i, m;
-  var rng = all(new RegExp(NUM+'\\s*(?:to|through|-|–)\\s*'+NUM), s);
-  for(i=0;i<rng.length;i++) if(s.indexOf('window')>=0) nums.push(nn(rng[i][1]), nn(rng[i][2]));
+  var nums=[], ranges=[], i, m;
+  var rng = all(new RegExp(NUM+'\\s*(?:to|through|-|–)\\s*'+NUM+'(?!\\s*(?:pm|am)\\b)'), s);   // "3-5pm" is a time, not windows
+  for(i=0;i<rng.length;i++) if(s.indexOf('window')>=0){
+    var lo = nn(rng[i][1]), hi = nn(rng[i][2]);
+    nums.push(lo, hi);
+    if(lo > 0 && hi >= lo && hi <= 40) ranges.push([lo, hi]);
+  }
   m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[\\w,-]+){0,2}?[\\s,]+windows?'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   m = all(/(?<!\d)(\d{1,2})\s*windows?/, s);
@@ -534,7 +538,24 @@ function parseWindows(s){
   if(bb===0 && /(?:bow|bay)\s+window/.test(s)) bb = 1;
   var addl = /(?:additional|more|other)\s+windows?/.test(s);
   var total = (bb && addl) ? base + bb : Math.max(base, bb);
-  return { count: total, known: nums.length>0 || bb>0 };
+  return { count: total, known: nums.length>0 || bb>0, ranges: ranges };
+}
+
+// Manager rule (2026-07-17): specific window RANGES set a tier floor —
+//   "3-5 windows" -> at least BIG
+//   "3-4 windows" -> at least MEDIUM
+//   "2-5 windows" -> at least MEDIUM
+// A floor only raises the tier; siding/combo/count rules can still push higher.
+var TIER_RANK = { SMALL:1, MEDIUM:2, BIG:3 };
+function windowRangeFloor(ranges){
+  var floor = null;
+  (ranges || []).forEach(function(p){
+    var lo = p[0], hi = p[1], f = null;
+    if(lo === 3 && hi === 5) f = 'BIG';
+    else if((lo === 3 && hi === 4) || (lo === 2 && hi === 5)) f = 'MEDIUM';
+    if(f && (!floor || TIER_RANK[f] > TIER_RANK[floor])) floor = f;
+  });
+  return floor;
 }
 
 function parseDoors(str){
@@ -786,9 +807,16 @@ function describeLead(lead, prodMap){
   var pu = prod.toUpperCase();
   var W = parseWindows(raw), D = parseDoors(raw);
   var w = W.count, wk = W.known, d = D.count, dt = D.types, dk = D.known;
+  var wranges = (W.ranges || []).slice();
   if(pu.indexOf('WIN')>=0 && w===0){
-    var rng = all(/(\d+)\s*[-–]\s*(\d+)/, raw);
-    if(rng.length){ w = Math.max.apply(null, rng.map(function(m){ return parseInt(m[2],10); })); wk = true; }
+    var rng = all(/(\d+)\s*[-–]\s*(\d+)(?!\s*(?:pm|am)\b)/, raw);
+    if(rng.length){
+      w = Math.max.apply(null, rng.map(function(m){ return parseInt(m[2],10); })); wk = true;
+      rng.forEach(function(m){
+        var lo = parseInt(m[1],10), hi = parseInt(m[2],10);
+        if(lo > 0 && hi >= lo && hi <= 40) wranges.push([lo, hi]);   // bare "3-5" on a WIN lead is a window range
+      });
+    }
     else { var bn = bareNumber(raw); if(bn){ w = bn; wk = true; } }
   }
   if(pu === 'DOORS' && d===0 && !dt.length){
@@ -798,9 +826,12 @@ function describeLead(lead, prodMap){
   var known = !!((prodMap && prodMap[prod]) || PRODC[prod]);
   var tk = prodTokens(prod);
   var inTk = function(x){ return tk.indexOf(x)>=0; };
+  var tier = tierOf(prod, w, wk, d, dt, prodMap);
+  var rfloor = windowRangeFloor(wranges);
+  if(rfloor && TIER_RANK[rfloor] > TIER_RANK[tier]) tier = rfloor;
   return {
     comps: comps, knownProduct: known, prod: prod, w: w, d: d, dtypes: dt,
-    tier: tierOf(prod, w, wk, d, dt, prodMap),
+    tier: tier,
     city: String(lead['City']||'').trim(),
     sid:  comps.indexOf('Siding')>=0  || /\bsiding/.test(raw) || pu.indexOf('SIDING')>=0 || inTk('S') || inTk('SID'),
     roof: comps.indexOf('Roofing')>=0 || /\broof/.test(raw)   || pu.indexOf('ROOF')>=0   || inTk('R'),
@@ -1299,6 +1330,7 @@ global.ENGINE = {
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
   parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber,
   tierOf: tierOf, opportunity: opportunity, describeLead: describeLead,
+  windowRangeFloor: windowRangeFloor, TIER_RANK: TIER_RANK,
   haversine: haversine, driveMinutes: driveMinutes,
   hungarianMin: hungarianMin, hungarianMax: hungarianMax,
   classifySkip: classifySkip, findNotePins: findNotePins,
