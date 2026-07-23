@@ -514,7 +514,16 @@ function nn(t){ t = String(t).trim().toLowerCase(); return /^\d+$/.test(t) ? par
 function all(re, s){ var out=[], m, r=new RegExp(re.source, re.flags.indexOf('g')<0?re.flags+'g':re.flags);
   while((m=r.exec(s))!==null){ out.push(m); if(m.index===r.lastIndex) r.lastIndex++; } return out; }
 
+// Times of day are count poison: "Conf--7/24 @ 10am--BP--1Door" must read as 1 door,
+// not 10. Strip "10am", "10:30 pm", "a.m.", and "@ 10" appointment markers before counting.
+function stripTimes(s){
+  return String(s)
+    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:a\.m\.|p\.m\.|am|pm)\b/g, ' ')
+    .replace(/@\s*\d{1,2}(?::\d{2})?\b/g, ' ');
+}
+
 function parseWindows(s){
+  s = stripTimes(s);
   var nums=[], ranges=[], i, m;
   var rng = all(new RegExp(NUM+'\\s*(?:to|through|-|–)\\s*'+NUM+'(?!\\s*(?:pm|am)\\b)'), s);   // "3-5pm" is a time, not windows
   for(i=0;i<rng.length;i++) if(s.indexOf('window')>=0){
@@ -522,7 +531,9 @@ function parseWindows(s){
     nums.push(lo, hi);
     if(lo > 0 && hi >= lo && hi <= 40) ranges.push([lo, hi]);
   }
-  m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[\\w,-]+){0,2}?[\\s,]+windows?'), s);
+  // filler words may not contain digits — otherwise "10 am--bp--1 windows"-style
+  // blobs bridge a stray number onto the count
+  m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[a-z][a-z,-]*){0,2}?[\\s,]+windows?'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   m = all(/(?<!\d)(\d{1,2})\s*windows?/, s);
   for(i=0;i<m.length;i++) nums.push(parseInt(m[i][1],10));
@@ -560,11 +571,11 @@ function windowRangeFloor(ranges){
 }
 
 function parseDoors(str){
-  var s = String(str).replace(/(\d)([a-z])/g, '$1 $2');   // unglue "2storms"
+  var s = stripTimes(str).replace(/(\d)([a-z])/g, '$1 $2');   // strip times, then unglue "2storms"
   function cnt(kw, dflt){
     if(dflt===undefined) dflt = 1;
     var ns=[], m, i;
-    m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[\\w,-]+){0,2}?[\\s,]+'+kw), s);
+    m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[a-z][a-z,-]*){0,2}?[\\s,]+'+kw), s);   // digit-free fillers only
     for(i=0;i<m.length;i++) ns.push(nn(m[i][1]));
     m = all(new RegExp('(\\d{1,2})[\\s-]*'+kw), s);   // dash tolerated: "1-fe", "2-sd"
     for(i=0;i<m.length;i++) ns.push(parseInt(m[i][1],10));
@@ -809,8 +820,9 @@ function describeLead(lead, prodMap){
   var W = parseWindows(raw), D = parseDoors(raw);
   var w = W.count, wk = W.known, d = D.count, dt = D.types, dk = D.known;
   var wranges = (W.ranges || []).slice();
+  var rawNoTimes = stripTimes(raw);   // fallbacks must not read "@ 10" / "10am" as counts
   if(pu.indexOf('WIN')>=0 && w===0){
-    var rng = all(/(\d+)\s*[-–]\s*(\d+)(?!\s*(?:pm|am)\b)/, raw);
+    var rng = all(/(\d+)\s*[-–]\s*(\d+)(?!\s*(?:pm|am)\b)/, rawNoTimes);
     if(rng.length){
       w = Math.max.apply(null, rng.map(function(m){ return parseInt(m[2],10); })); wk = true;
       rng.forEach(function(m){
@@ -818,10 +830,10 @@ function describeLead(lead, prodMap){
         if(lo > 0 && hi >= lo && hi <= 40) wranges.push([lo, hi]);   // bare "3-5" on a WIN lead is a window range
       });
     }
-    else { var bn = bareNumber(raw); if(bn){ w = bn; wk = true; } }
+    else { var bn = bareNumber(rawNoTimes); if(bn){ w = bn; wk = true; } }
   }
   if(pu === 'DOORS' && d===0 && !dt.length){
-    var bn2 = bareNumber(raw); if(bn2){ d = bn2; dk = true; }
+    var bn2 = bareNumber(rawNoTimes); if(bn2){ d = bn2; dk = true; }
   }
   var comps = (prodMap && prodMap[prod]) || PRODC[prod] || ['Windows'];
   var known = !!((prodMap && prodMap[prod]) || PRODC[prod]);
@@ -1329,7 +1341,7 @@ global.ENGINE = {
   DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
   CITY_ALIASES: CITY_ALIASES, BOTTOM_EXCLUDE: BOTTOM_EXCLUDE,
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
-  parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber,
+  parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber, stripTimes: stripTimes,
   tierOf: tierOf, opportunity: opportunity, describeLead: describeLead,
   windowRangeFloor: windowRangeFloor, TIER_RANK: TIER_RANK,
   haversine: haversine, driveMinutes: driveMinutes,

@@ -216,6 +216,32 @@ function runAll(E){
     eq('…and 3 doors tiers BIG', mix.tier, 'BIG');
   })();
 
+  group('Notes parsing — times of day are not counts (bug 2026-07-23)');
+  (function(){
+    // the exact live note that showed up as 10D
+    var note1 = 'conf--7/24 @ 10am--bp--1door--1995. must run';
+    eq('"@ 10am--bp--1door" counts 1 door, not 10', E.parseDoors(note1).count, 1);
+    var d1 = E.describeLead(mkLead({ Product:'DOORS', Notes:'Conf--7/24 @ 10am--BP--1Door--1995. Must run' }), null);
+    eq('full lead reads 1D', d1.opp || E.opportunity(d1), '1D');
+    eq('…and tiers SMALL (single untyped door)', d1.tier, 'SMALL');
+    // second live note — the sane one stays sane
+    var d2 = E.describeLead(mkLead({ Product:'DOORS',
+      Notes:'BP SFH 1 ED Door Notes:  looking to upgrade entry door  --- Must run (wecxl the last visit).' }), null);
+    eq('1 ED note reads 1 door', d2.d, 1);
+    eq('…typed front → MEDIUM', d2.tier, 'MEDIUM');
+    // time formats
+    eq('"10:30 am" stripped', E.parseDoors('confirm 10:30 am, 2 storm doors').count, 2);
+    eq('"2pm" stripped, windows unaffected', E.parseWindows('appt 2pm, 6 windows').count, 6);
+    eq('"@ 10" (no am/pm) stripped from DOORS fallback',
+      E.describeLead(mkLead({ Product:'DOORS', Notes:'conf @ 10, must run' }), null).d, 0);
+    eq('"@ 10" stripped from WINDOWS fallback',
+      E.describeLead(mkLead({ Product:'WINDOWS', Notes:'conf @ 10, needs quote' }), null).w, 0);
+    // digit-free filler rule: a stray number can no longer bridge onto a count
+    eq('"2 cats, 1 door" counts 1, not 2', E.parseDoors('wife home, 2 cats, 1 door').count, 1);
+    eq('legit filler words still work ("2 white doors")', E.parseDoors('2 white doors').count, 2);
+    eq('"10 doors" still counts 10 (real counts unharmed)', E.parseDoors('10 doors').count, 10);
+  })();
+
   group('Notes parsing — product tags (word boundaries)');
   var pf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'customer will bring proof of ownership' }), null);
   ok('"proof of ownership" is NOT a roof lead', pf.roof === false, 'roof=' + pf.roof);
