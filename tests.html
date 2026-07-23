@@ -463,18 +463,28 @@ function runAll(E){
     eq('BIG lead below the floor is left unfilled', r.rows[0].rep, null);
     ok('flagged as below the BIG floor', /below \$5,000 BIG floor/.test(r.rows[0].flags[0]), r.rows[0].flags[0]);
 
-    // drive ceiling
+    // no drive cap (rule 2026-07-17): even an absurd drive gets assigned, with flags
     var far = [ mkLead({ 'Customer Name':'Far', 'City':'Winchester' }) ];
-    var r2 = E.run(mkInput(far, [rep('titus smith','chester')]));   // Chester VA → Winchester is way over 120m
-    eq('lead beyond the 120-minute ceiling is unfilled', r2.rows[0].rep, null);
-    ok('flagged as nobody within 120m', /no rep within 120m/.test(r2.rows[0].flags[0]), r2.rows[0].flags[0]);
+    var r2 = E.run(mkInput(far, [rep('titus smith','chester')]));   // Chester VA → Winchester ≈ 3.5 hours
+    ok('huge drive still assigns (no cap)', r2.rows[0].rep !== null, JSON.stringify(r2.rows[0].flags));
+    ok('…with a verify-drive flag', r2.rows[0].flags.some(function(f){ return /^verify drive ~\d+m$/.test(f); }));
+    ok('…and the row is highlighted warn', r2.rows[0].state === 'warn');
 
-    // unknown city
+    // unknown city: assigned anyway, drive unknown, city surfaced for the form
     var unk = [ mkLead({ 'Customer Name':'Nowhere', 'City':'Shangri-La' }) ];
     var r3 = E.run(mkInput(unk, [rep('titus smith','bowie')]));
-    eq('unknown city → unfilled', r3.rows[0].rep, null);
+    ok('unknown city still assigns', r3.rows[0].rep !== null, JSON.stringify(r3.rows[0].flags));
+    eq('…drive shown as unknown (null)', r3.rows[0].drive, null);
+    ok('…flagged that the city needs coordinates',
+      r3.rows[0].flags.some(function(f){ return /drive unknown — city needs coordinates/.test(f); }), JSON.stringify(r3.rows[0].flags));
     ok('unknown city surfaced for the UI form (as {city,state})',
       r3.missingGeo.some(function(m){ return m.city === 'shangri-la'; }), JSON.stringify(r3.missingGeo));
+
+    // pool exhaustion is now the only non-floor unfilled reason
+    var two = [ mkLead({ 'Customer Name':'A', 'City':'Bowie' }), mkLead({ 'Customer Name':'B', 'City':'Bowie' }) ];
+    var r4 = E.run(mkInput(two, [rep('titus smith','bowie')]));
+    eq('more leads than reps → one unfilled', r4.counts.unfilled, 1);
+    ok('…labeled as pool exhaustion', r4.rows.some(function(x){ return !x.rep && /more leads than available reps/.test(x.flags[0]); }));
   })();
 
   // ---------- 8. tier ordering ----------
@@ -793,10 +803,13 @@ function runAll(E){
     ok('and the rejection is reported',
       r.wrongTeamField.some(function(w){ return w.rep === 'malcolm kerr' && /Kappa/.test(w.reason); }));
     // Even if the FIELD board has unfilled leads and the Kappa rep is idle:
-    var farLead = mkLead({ 'Customer Name':'Field', 'City':'Winchester', 'State':'VA' });
-    var r2 = E.run(Object.assign({}, inp, { leads:[farLead] }));
-    // Titus can't reach Winchester (>120min), so field is unfilled — Kappa still can't take it.
-    ok('unfilled field lead does NOT get picked up by an idle Kappa rep', r2.rows[0].rep === null);
+    // two field leads, one field rep -> one lead must go unfilled rather than
+    // fall to the idle Kappa rep. (Drive no longer blocks, so exhaustion is the trigger.)
+    var twoLeads = [ mkLead({ 'Customer Name':'F1', 'City':'Bowie' }), mkLead({ 'Customer Name':'F2', 'City':'Bowie' }) ];
+    var r2 = E.run(Object.assign({}, inp, { leads: twoLeads }));
+    eq('one field lead goes unfilled despite an idle Kappa rep', r2.counts.unfilled, 1);
+    ok('and no row was given to the Kappa rep',
+      r2.rows.every(function(x){ return !x.rep || x.rep.c !== 'malcolm kerr'; }));
   })();
 
   group('Bath overflow (field-first, then bath) — spec option B');
@@ -878,15 +891,15 @@ function runAll(E){
       r.fieldAvail.map(function(a){ return a.c; }).sort().join(',') === 'samantha ludwig,steven forss');
   })();
 
-  group('Per-market drive cap and BIG floor');
+  group('Per-market BIG floor (drive cap removed)');
   (function(){
-    // Same setup, run with default vs a stricter cap.
+    // Drive never blocks: even with a ceil passed in (legacy input), it's ignored.
     var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
     var leads = [ mkLead({ 'Customer Name':'Frederick lead', 'City':'Frederick', 'State':'MD' }) ];
     var rDefault = E.run(mkInput(leads, [titus]));
-    ok('with default 120m cap, Frederick assigns', rDefault.rows[0].rep !== null);
+    ok('Frederick (~109m) assigns', rDefault.rows[0].rep !== null);
     var rTight = E.run(mkInput(leads, [titus], { ceil:60 }));
-    eq('with a 60m cap, Frederick becomes unfilled', rTight.rows[0].rep, null);
+    ok('a legacy ceil input is ignored — still assigns', rTight.rows[0].rep !== null);
     // Floor: give a weak rep a BIG (siding) lead — with the default floor it's unfilled.
     var weak = rep('titus smith','bowie|md'); weak.rank.team = 'Beta';
     ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
@@ -982,21 +995,34 @@ function runAll(E){
     eq('bath bench is empty (the one Kappa rep worked)', r.counts.bathBench, 0);
   })();
 
-  group('All-markets: per-market caps still apply');
+  group('All-markets: market containment (no drive cap)');
   (function(){
+    // A Richmond rep never runs a DC lead, even with the drive cap gone —
+    // each market's matrix only ever contains its own leads and its own crew.
     var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
-    var rank = { 'titus smith':titus.rank }, homes = { 'titus smith':titus.home };
-    var d60 = { 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 } };
-    var leads = [ mkLead({ 'Customer Name':'Frederick lead', 'City':'Frederick', 'State':'MD', 'Market':'DC Metro' }) ];
-    leads[0]._row = 2;
-    function go(ceilBy){
-      return E.runAllMarkets({ slot:'AM', leads:leads,
-        rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':[] },
-        bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
-        geo:null, aliases:null, prodMap:null, manualPins:{}, ceilBy:ceilBy });
-    }
-    ok('default cap: Frederick assigns', go(null).rows[0].rep !== null);
-    eq('60-min DC cap: Frederick unfilled', go({ 'DC Metro':60 }).rows[0].rep, null);
+    var ronald = rep('ronald linn','chester|va'); ronald.rank.team = 'Gamma-RVA';
+    var rank = { 'titus smith':titus.rank, 'ronald linn':ronald.rank };
+    var homes = { 'titus smith':titus.home, 'ronald linn':ronald.home };
+    var d60 = { 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 },
+                'ronald linn':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    var leads = [
+      mkLead({ 'Customer Name':'DC 1', 'City':'Bowie', 'State':'MD', 'Market':'DC Metro' }),
+      mkLead({ 'Customer Name':'DC 2', 'City':'Laurel', 'State':'MD', 'Market':'DC Metro' }),
+      mkLead({ 'Customer Name':'RVA 1', 'City':'Henrico', 'State':'VA', 'Market':'Richmond' })
+    ];
+    leads.forEach(function(l, i){ l._row = i + 2; });
+    var r = E.runAllMarkets({ slot:'AM', leads:leads,
+      rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':['ronald linn'] },
+      bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{} });
+    var byCust = {};
+    r.rows.forEach(function(x){ byCust[x.lead['Customer Name']] = x.rep ? x.rep.c : null; });
+    eq('DC lead 1 went to the DC rep', byCust['DC 1'], 'titus smith');
+    eq('Richmond lead went to the Richmond rep', byCust['RVA 1'], 'ronald linn');
+    // DC 2 has no DC rep left — the idle Richmond rep must NOT cross over, even capless
+    eq('the extra DC lead stays unfilled rather than crossing markets', byCust['DC 2'], null);
+    ok('…flagged as pool exhaustion',
+      r.rows.some(function(x){ return x.lead['Customer Name'] === 'DC 2' && /more leads than available reps/.test(x.flags[0]); }));
   })();
 }
 </script>

@@ -151,7 +151,8 @@ Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
 - **New rep** — they show up automatically once they're on the power ranking AND the phone list. If they're on the ranking but not the phone list yet, use Setup → **Home overrides** — format the home as `city|state` (e.g. `crofton|md`).
 - **Rep name spelled wrong on prior board** — Setup → **Name aliases**, e.g. `frank hill` → `franklin hill`.
 - **New market or team** — the market picker is fixed at three (DC Metro / Hampton Roads / Richmond). If Thompson Creek adds a fourth, tell me and I'll edit `TEAMS_BY_MARKET` in the engine.
-- **Drive cap or BIG floor feels wrong for a market** — Setup → **Per-market caps**. Defaults are 120 min drive cap and $5,000 BIG floor for every market; override either per market.
+- **BIG floor feels wrong for a market** — Setup → **Per-market BIG floor**. Default is $5,000 for every market; override per market.
+- **Drive times never block an assignment.** Every lead gets a rep as long as one is free in that market — drive only nudges the scoring toward closer reps. Long drives (75+ min) are flagged in yellow so you can override by hand; unknown cities are assigned too, with "drive unknown" flagged until you add coordinates. Reps always stay inside their own market (a Richmond rep only ever runs Richmond leads).
 - **Wrong-state city warning** — if a lead says Norfolk, MD (typo), the app falls back to Norfolk, VA (the real one) and flags the row so you can verify. Silent wrong-state matches are the failure mode we're avoiding.
 
 ---

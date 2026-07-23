@@ -180,7 +180,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
       <button class="sm" id="btnHomeOv">Home overrides (<span id="hoCount">0</span>)</button>
       <button class="sm" id="btnAlias">Name aliases (<span id="aliasCount">0</span>)</button>
       <button class="sm" id="btnProd">Product mappings (<span id="prodCount">0</span>)</button>
-      <button class="sm" id="btnCaps">Per-market caps</button>
+      <button class="sm" id="btnCaps">Per-market BIG floor</button>
       <span class="spacer"></span>
       <button class="sm" id="btnExport">Back up settings (.json)</button>
       <button class="sm" id="btnImport">Restore settings</button>
@@ -314,7 +314,8 @@ var CONST = { K:12, K2:8, VOL_ADD:10000, DRIVE_PEN:40 };
 
 // per-market defaults (override in settings)
 var DEFAULT_FLOOR = { 'DC Metro':5000, 'Hampton Roads':5000, 'Richmond':5000 };
-var DEFAULT_CEIL  = { 'DC Metro':120,  'Hampton Roads':120,  'Richmond':120  };
+// Drive-time cap removed 2026-07-17 (manager rule): drive is a scoring penalty
+// only — it never blocks an assignment.
 
 // Team column (col 2 of the power ranking) drives crew membership.
 var MARKETS = ['DC Metro', 'Hampton Roads', 'Richmond'];
@@ -854,7 +855,7 @@ function describeLead(lead, prodMap){
 //   slot, leads:[rowObj],
 //   fieldRoster:[canon], bathRoster:[canon],             (or legacy: `roster` == fieldRoster)
 //   rank, d60, global60, homes, origins, geo, aliases, prodMap,
-//   ceil, floor, bottomExclude,                          (per-market; fall back to defaults)
+//   floor, bottomExclude,                                (per-market; fall back to defaults)
 //   manualPins:{leadIndex:canon}
 // }
 function run(input){
@@ -863,7 +864,6 @@ function run(input){
   var aliases = input.aliases || DEFAULT_ALIASES;
   var prodMap = input.prodMap || {};
   var leads = input.leads;
-  var ceil = (input.ceil != null) ? input.ceil : (DEFAULT_CEIL[market] || 120);
   var floor = (input.floor != null) ? input.floor : (DEFAULT_FLOOR[market] || 5000);
   var bottomExclude = input.bottomExclude || DEFAULT_BOTTOM_EXCLUDE[market] || [];
   var marketTeams = TEAMS_BY_MARKET[market] || [];
@@ -996,10 +996,11 @@ function run(input){
       live.forEach(function(rep, b){
         var dm = driveTo(rep.origin, L[i].city, L[i].stateAbbr);
         DR[a][b] = dm;
-        if(dm === null || dm > ceil){ M[a][b] = -1e9; return; }
+        // Manager rule (2026-07-17): drive time never blocks an assignment.
+        // It stays a scoring penalty (closer reps preferred); unknown drive = no penalty, flagged.
         var bv = S.baseVal(rep.c, L[i].comps);
         if(T === 'BIG' && bv < floor){ M[a][b] = -1e9; return; }
-        M[a][b] = bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*dm + S.tiebreak(rep.c);
+        M[a][b] = bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*(dm === null ? 0 : dm) + S.tiebreak(rep.c);
       });
     });
     var rowToCol = hungarianMax(M);
@@ -1016,11 +1017,10 @@ function run(input){
   });
   // `live` is now the field bench (unassigned field reps), available for bath overflow.
 
+  // Drive no longer limits feasibility — only the BIG floor can.
   function feasibleField(i, applyFloor){
     var d = L[i];
     return fieldAvail.filter(function(a){
-      var dm = driveTo(a.origin, d.city, d.stateAbbr);
-      if(dm === null || dm > ceil) return false;
       if(applyFloor && S.baseVal(a.c, d.comps) < floor) return false;
       return true;
     }).map(function(a){ return a.disp; });
@@ -1047,8 +1047,8 @@ function run(input){
         var d = L[i];
         var s = bathScore(rep, d);
         DR[a][b] = s.dm;
-        if(s.dm === null || s.dm > ceil){ M[a][b] = -1e9; return; }
-        M[a][b] = s.bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*s.dm + S.tiebreak(rep.c);
+        // drive never blocks — penalty only, unknown drive = no penalty
+        M[a][b] = s.bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*(s.dm === null ? 0 : s.dm) + S.tiebreak(rep.c);
       });
     });
     var rowToCol = hungarianMax(M);
@@ -1071,11 +1071,7 @@ function run(input){
   bathOpenIdx.forEach(function(i){ if(!bathRes[i]) bathRes[i] = null; });
 
   function feasibleBath(i){
-    var d = L[i];
-    return bathAvail.filter(function(a){
-      var dm = driveTo(a.origin, d.city, d.stateAbbr);
-      return dm !== null && dm <= ceil;
-    }).map(function(a){ return a.disp; });
+    return bathAvail.map(function(a){ return a.disp; });
   }
 
   // ================== duplicates ==================
@@ -1092,6 +1088,7 @@ function run(input){
     f.push('from: ' + originDisp(rep.origin));
     var g = S.get60(rep.c);
     if(g) f.push('60-day vol $' + Math.round(g.vol/1000) + 'K');
+    if(dm === null) f.push('drive unknown — city needs coordinates (form below)');
     if(dm > 75) f.push('verify drive ~' + Math.round(dm) + 'm');
     var thin = d.comps.every(function(p){ return ctx.rank[rep.c][p] && ctx.rank[rep.c][p].leads < 5; });
     if(thin) f.push('thin 2-wk product volume — leaning on 60-day overall');
@@ -1107,17 +1104,17 @@ function run(input){
       rep:null, origin:null, drive:null, eff:null, flags:[], state:'', pinned:false, board:'field' };
     if(r){
       var fr = flagsFor(r.rep, r.drive, d);
-      row.rep = r.rep; row.origin = originDisp(r.rep.origin); row.drive = Math.round(r.drive);
+      row.rep = r.rep; row.origin = originDisp(r.rep.origin);
+      row.drive = r.drive === null ? null : Math.round(r.drive);
       row.eff = Math.round(r.eff); row.flags = fr.flags;
-      row.state = (r.drive > 75 || fr.thin) ? 'warn' : (d.tier === 'BIG' ? 'big' : '');
+      row.state = (r.drive === null || r.drive > 75 || fr.thin) ? 'warn' : (d.tier === 'BIG' ? 'big' : '');
     } else {
-      var fa = feasibleField(i, d.tier === 'BIG');
-      if(d.tier === 'BIG' && !fa.length && feasibleField(i, false).length)
-        row.flags = ['UNFILLED — reachable reps all below $' + floor.toLocaleString('en-US') + ' BIG floor'];
-      else if(fa.length)
-        row.flags = ['UNCOVERED — only reachable: ' + fa.join(', ') + ' (taken)'];
+      // Drive never blocks anymore — a lead goes unfilled only when the rep pool
+      // runs out, or (BIG tier) everyone is under the floor.
+      if(d.tier === 'BIG' && !feasibleField(i, true).length && fieldAvail.length)
+        row.flags = ['UNFILLED — all reps below $' + floor.toLocaleString('en-US') + ' BIG floor'];
       else
-        row.flags = ['UNCOVERED — no rep within ' + ceil + 'm'];
+        row.flags = ['UNCOVERED — more leads than available reps (all taken)'];
       row.state = 'bad';
     }
     if(!d.knownProduct) row.flags.push('unknown product code "' + d.prod + '" — scored as Windows');
@@ -1155,16 +1152,14 @@ function run(input){
       board:'bath', overflow:false };
     if(r){
       var fr = flagsFor(r.rep, r.drive, { tier:d.tier, comps:d.comps });
-      row.rep = r.rep; row.origin = originDisp(r.rep.origin); row.drive = Math.round(r.drive);
+      row.rep = r.rep; row.origin = originDisp(r.rep.origin);
+      row.drive = r.drive === null ? null : Math.round(r.drive);
       row.eff = Math.round(r.eff); row.flags = fr.flags;
       row.overflow = r.overflow;
       if(r.overflow) row.flags.unshift('OVERFLOW from field bench (scored on Bath)');
-      row.state = r.overflow ? 'warn' : (r.drive > 75 ? 'warn' : '');
+      row.state = r.overflow ? 'warn' : ((r.drive === null || r.drive > 75) ? 'warn' : '');
     } else {
-      var fa = feasibleBath(i);
-      row.flags = fa.length
-        ? ['UNCOVERED — only Kappa reachable: ' + fa.join(', ') + ' (taken); no field bench available']
-        : ['UNCOVERED — no bath rep within ' + ceil + 'm and no field bench available'];
+      row.flags = ['UNCOVERED — no bath rep free and no field bench left'];
       row.state = 'bad';
     }
     if(d.resched) row.flags.push('notes mention a reschedule — check');
@@ -1206,7 +1201,7 @@ function run(input){
   });
 
   return {
-    market: market, ceil: ceil, floor: floor,
+    market: market, floor: floor,
     rows: rows, bench: bench,
     bathRows: bathRows, bathBench: bathBench,
     dropped: dropped, skips: skips,
@@ -1240,7 +1235,7 @@ function originDisp(o){
 // results merged into a single board with rows tagged by market.
 // input: { slot, leads, rosters:{market:[names]}, bathRoster:[names], rank, d60,
 //          global60, homes, origins, geo, aliases, prodMap,
-//          ceilBy:{market:min}, floorBy:{market:$}, manualPins }
+//          floorBy:{market:$}, manualPins }
 function runAllMarkets(input){
   var aliases = input.aliases || DEFAULT_ALIASES;
   var bathPool = (input.bathRoster || []).slice();
@@ -1253,7 +1248,6 @@ function runAllMarkets(input){
       rank: input.rank, d60: input.d60, global60: input.global60,
       homes: input.homes, origins: input.origins, geo: input.geo,
       aliases: input.aliases, prodMap: input.prodMap,
-      ceil: input.ceilBy ? input.ceilBy[M] : undefined,
       floor: input.floorBy ? input.floorBy[M] : undefined,
       manualPins: input.manualPins
     });
@@ -1306,7 +1300,7 @@ function runAllMarkets(input){
     .sort(function(x,y){ return y.vol - x.vol; });
 
   return {
-    market: 'ALL', isAll: true, ceil: null, floor: null,
+    market: 'ALL', isAll: true, floor: null,
     rows: rows, bench: bench, bathRows: bathRows, bathBench: bathBench,
     dropped: dropped, skips: skips,
     missingGeo: missingGeo, stateFallbacks: stateFallbacks,
@@ -1331,7 +1325,7 @@ function runAllMarkets(input){
 global.ENGINE = {
   CONST: CONST, PRODC: PRODC, PRODUCTS: PRODUCTS,
   MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM,
-  DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_CEIL: DEFAULT_CEIL, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
+  DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
   DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
   CITY_ALIASES: CITY_ALIASES, BOTTOM_EXCLUDE: BOTTOM_EXCLUDE,
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
@@ -1899,11 +1893,11 @@ function doRun(){
         var m = state.rosters[M] || {};
         rosters[M] = Object.keys(m).filter(function(c){ return m[c]; });
       });
-      r = E.runAllMarkets(Object.assign(common, { rosters: rosters, ceilBy: store.ceil, floorBy: store.floor }));
+      r = E.runAllMarkets(Object.assign(common, { rosters: rosters, floorBy: store.floor }));
     } else {
       r = E.run(Object.assign(common, {
         market: state.market, fieldRoster: rosterList(),
-        ceil: store.ceil[state.market], floor: store.floor[state.market]
+        floor: store.floor[state.market]
       }));
     }
   }
@@ -2138,8 +2132,8 @@ function renderResult(r){
     if(r.counts.bathUnfilled) stat(r.counts.bathUnfilled, 'bath unfilled');
   }
   var sk = r.skips;
-  var capsTxt = r.isAll ? 'per-market caps apply'
-    : 'drive cap ' + r.ceil + 'm, BIG floor $' + r.floor.toLocaleString('en-US');
+  var capsTxt = r.isAll ? 'per-market BIG floors apply · no drive cap'
+    : 'BIG floor $' + r.floor.toLocaleString('en-US') + ' · no drive cap';
   var marketTxt = r.isAll ? 'All markets' : r.market;
   var mktSkipTxt = r.isAll ? sk.market + ' unknown market' : sk.market + ' other market';
   s.appendChild(el('span', { class:'muted', style:'font-size:12px', text:
@@ -2152,7 +2146,7 @@ function renderResult(r){
     items.forEach(function(t){ ul.appendChild(el('li', { text:t })); });
     fb.appendChild(el('div', { class:'notice ' + cls }, [ el('b',{text:title}), ul ]));
   }
-  if(r.missingGeo.length) notice('bad', 'Cities with no coordinates — these can’t be assigned:',
+  if(r.missingGeo.length) notice('warn', 'Cities with no coordinates — leads still assigned, but drive is unknown until you add them below:',
     [r.missingGeo.map(function(m){ return E.title(m.city) + (m.state ? ', ' + m.state.toUpperCase() : ''); }).join(' · ')]);
   if(r.stateFallbacks && r.stateFallbacks.length) notice('warn',
     'City matched with a different state — verify the coordinates:',
@@ -2535,24 +2529,20 @@ $('#btnCaps').addEventListener('click', function(){
   var box = el('section', { class:'panel' });
   var body = el('div', { class:'body' });
   box.appendChild(el('div', { class:'head' }, [
-    el('h2', { text:'Per-market drive cap and BIG floor' }),
+    el('h2', { text:'Per-market BIG floor' }),
     el('span', { class:'spacer' }),
     el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
   ]));
   body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
-    text:'Drive cap (minutes) beyond which a rep can\'t be assigned to a lead. BIG floor is the minimum Eff. NSLI to be eligible for a BIG lead. Defaults are 120 min / $5,000. Leave a box empty to use the default.' }));
+    text:'BIG floor is the minimum Eff. NSLI a rep needs to be eligible for a BIG lead. Default $5,000. Leave empty to use the default. (Drive time no longer limits assignments — it only nudges the scoring toward closer reps.)' }));
   E.MARKETS.forEach(function(m){
-    var ceilIn = el('input', { type:'number', min:'30', max:'240', step:'5',
-      value: store.ceil[m] != null ? String(store.ceil[m]) : '', placeholder:String(E.DEFAULT_CEIL[m]||120) });
     var floorIn = el('input', { type:'number', min:'0', step:'250',
       value: store.floor[m] != null ? String(store.floor[m]) : '', placeholder:String(E.DEFAULT_FLOOR[m]||5000) });
     body.appendChild(el('div', { class:'row', style:'align-items:center' }, [
       el('b', { text:m, style:'min-width:140px' }),
-      el('span', { class:'lbl', text:'Cap (min)' }), el('div', { class:'col', style:'width:110px' }, [ceilIn]),
       el('span', { class:'lbl', text:'Floor ($)' }), el('div', { class:'col', style:'width:130px' }, [floorIn]),
       el('button', { class:'sm primary', text:'Save', onclick:function(){
-        var c = parseFloat(ceilIn.value), f = parseFloat(floorIn.value);
-        if(isFinite(c) && c > 0) store.ceil[m] = c; else delete store.ceil[m];
+        var f = parseFloat(floorIn.value);
         if(isFinite(f) && f >= 0) store.floor[m] = f; else delete store.floor[m];
         save();
       }})
@@ -2576,7 +2566,7 @@ $('#btnProd').addEventListener('click', function(){
 });
 
 // ---------------- settings backup ----------------
-var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','ceil','floor','bottomExclude'];
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude'];
 $('#btnExport').addEventListener('click', function(){
   var out = { version:2, exported:new Date().toISOString() };
   BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
