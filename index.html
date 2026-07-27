@@ -180,6 +180,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
       <button class="sm" id="btnHomeOv">Home overrides (<span id="hoCount">0</span>)</button>
       <button class="sm" id="btnAlias">Name aliases (<span id="aliasCount">0</span>)</button>
       <button class="sm" id="btnProd">Product mappings (<span id="prodCount">0</span>)</button>
+      <button class="sm" id="btnReps">Manage reps (<span id="repsCount">0</span>)</button>
       <button class="sm" id="btnCaps">Per-market BIG floor</button>
       <span class="spacer"></span>
       <button class="sm" id="btnExport">Back up settings (.json)</button>
@@ -1382,8 +1383,10 @@ var store = {
   refs: null,
   geo: {}, aliases: {}, homeOverrides: {}, prodMap: {},
   presets: {},              // { 'DC Metro': { name:[canon,...], ... }, 'Hampton Roads': {...}, 'Richmond': {...} }
-  ceil: {}, floor: {},      // per-market overrides
-  bottomExclude: {}         // per-market extra exclusions on top of defaults? (kept for future UI)
+  ceil: {}, floor: {},      // per-market overrides (ceil retired — drive no longer caps)
+  bottomExclude: {},        // per-market extra exclusions on top of defaults? (kept for future UI)
+  manualReps: {},           // reps added by hand before they're on the ranking: { canon: {team, home} }
+  removedReps: []           // reps hidden from every roster (departed / on leave)
 };
 function load(){
   try {
@@ -1411,6 +1414,8 @@ function load(){
   if(!store.ceil) store.ceil = {};
   if(!store.floor) store.floor = {};
   if(!store.bottomExclude) store.bottomExclude = {};
+  if(!store.manualReps) store.manualReps = {};
+  if(!store.removedReps) store.removedReps = [];
 }
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify(store)); }
@@ -1654,6 +1659,7 @@ function refreshRefs(){
   rs.textContent = ready ? 'reference data: loaded' : 'reference data: needed — open Setup';
   if(!ready) $('#setupPanel').classList.remove('collapsed'), $('#setupToggle').setAttribute('aria-expanded','true'), $('#setupToggle').textContent = 'Close';
   $('#geoCount').textContent = Object.keys(store.geo).length;
+  $('#repsCount').textContent = Object.keys(store.manualReps).length + store.removedReps.length;
   $('#hoCount').textContent = Object.keys(store.homeOverrides).length;
   $('#aliasCount').textContent = Object.keys(store.aliases).length;
   $('#prodCount').textContent = Object.keys(store.prodMap).length;
@@ -1665,8 +1671,27 @@ function homesAll(){
   var h = Object.assign({}, (store.refs && store.refs.homes) || {});
   var ali = aliasAll();
   Object.keys(store.homeOverrides).forEach(function(k){ h[E.canon(k, ali)] = String(store.homeOverrides[k]).trim().toLowerCase(); });
+  Object.keys(store.manualReps).forEach(function(k){ h[E.canon(k, ali)] = String(store.manualReps[k].home || '').trim().toLowerCase(); });
   return h;
 }
+// Rank data + hand-added reps. A manual rep gets a zero-stat record (team included)
+// so the engine scores them off their 60-day row or the team prior — same path as
+// any thin-data rep. If the name already exists in the ranking file, the real data
+// wins and the manual entry only contributes their home.
+function rankAll(){
+  var r = Object.assign({}, (store.refs && store.refs.rank) || {});
+  var ali = aliasAll();
+  Object.keys(store.manualReps).forEach(function(k){
+    var c = E.canon(k, ali);
+    if(r[c]) return;
+    var rec = { team: store.manualReps[k].team };
+    E.PRODUCTS.forEach(function(p){ rec[p] = { leads:0, close:0, nsli:0 }; });
+    rec._tot = { leads:0, close:0, nsli:0 };
+    r[c] = rec;
+  });
+  return r;
+}
+function isRemoved(c){ return store.removedReps.indexOf(c) >= 0; }
 function currentRoster(){
   if(!state.rosters[state.market]) state.rosters[state.market] = {};
   return state.rosters[state.market];
@@ -1674,20 +1699,22 @@ function currentRoster(){
 function repsForMarket(market){
   var homes = homesAll();
   if(!store.refs || !store.refs.rank) return [];
+  var rank = rankAll();
   var wanted = E.TEAMS_BY_MARKET[market] || [];
   var excl = (store.bottomExclude && store.bottomExclude[market]) || E.DEFAULT_BOTTOM_EXCLUDE[market] || [];
-  return Object.keys(store.refs.rank).filter(function(c){
+  return Object.keys(rank).filter(function(c){
     if(!homes[c]) return false;
-    if(excl.indexOf(c) >= 0) return false;
-    var team = store.refs.rank[c].team;
+    if(excl.indexOf(c) >= 0 || isRemoved(c)) return false;
+    var team = rank[c].team;
     return team ? wanted.indexOf(team) >= 0 : false;
   }).sort();
 }
 function bathReps(){
   var homes = homesAll();
   if(!store.refs || !store.refs.rank) return [];
-  return Object.keys(store.refs.rank).filter(function(c){
-    return store.refs.rank[c].team === E.BATH_TEAM && homes[c];
+  var rank = rankAll();
+  return Object.keys(rank).filter(function(c){
+    return rank[c].team === E.BATH_TEAM && homes[c] && !isRemoved(c);
   }).sort();
 }
 function repRow(c, homes, checkedMap, onChange, extraHint){
@@ -1739,12 +1766,14 @@ function buildRoster(){
   refreshPresets();
   updateRun();
 }
+// Both lists filter removed reps so a stale preset can't sneak a departed rep
+// past the hidden checkboxes and into a run.
 function rosterList(){
   var r = currentRoster();
-  return Object.keys(r).filter(function(c){ return r[c]; });
+  return Object.keys(r).filter(function(c){ return r[c] && !isRemoved(c); });
 }
 function bathRosterList(){
-  return Object.keys(state.bathRoster).filter(function(c){ return state.bathRoster[c]; });
+  return Object.keys(state.bathRoster).filter(function(c){ return state.bathRoster[c] && !isRemoved(c); });
 }
 function allRosterCount(){
   var n = 0;
@@ -1887,7 +1916,7 @@ function doRun(){
     slot: state.slot,
     leads: state.leadData.rows,
     bathRoster: bathRosterList(),
-    rank: store.refs.rank,
+    rank: rankAll(),
     d60: store.refs.d60,
     global60: store.refs.global60 || E.global60Of(store.refs.d60),
     homes: homesAll(),
@@ -1903,7 +1932,7 @@ function doRun(){
       var rosters = {};
       E.MARKETS.forEach(function(M){
         var m = state.rosters[M] || {};
-        rosters[M] = Object.keys(m).filter(function(c){ return m[c]; });
+        rosters[M] = Object.keys(m).filter(function(c){ return m[c] && !isRemoved(c); });
       });
       r = E.runAllMarkets(Object.assign(common, { rosters: rosters, floorBy: store.floor }));
     } else {
@@ -2536,6 +2565,104 @@ $('#btnAlias').addEventListener('click', function(){
     parse:function(s){ return s.trim() ? s.trim().toLowerCase() : null; }
   });
 });
+// ---------------- manage reps (hires and departures) ----------------
+var ALL_TEAMS = ['Beta','Delta','Gamma-VAB','Gamma-RVA','Kappa'];
+function teamMarketLabel(team){
+  if(team === E.BATH_TEAM) return 'Bath crew';
+  var m = E.MARKETS.filter(function(mk){ return (E.TEAMS_BY_MARKET[mk]||[]).indexOf(team) >= 0; })[0];
+  return m || '?';
+}
+function renderRepsEditor(){
+  var host = $('#editorHost'); host.innerHTML = '';
+  var box = el('section', { class:'panel' });
+  var body = el('div', { class:'body' });
+  box.appendChild(el('div', { class:'head' }, [
+    el('h2', { text:'Manage reps' }),
+    el('span', { class:'spacer' }),
+    el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
+  ]));
+
+  // --- add a new hire ---
+  body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
+    text:'New hire not on the power ranking yet? Add them here — they appear in their market\'s roster immediately and score off the team average (or their 60-day numbers) until the ranking file catches up. Once they show up in a re-uploaded ranking, the real data takes over automatically.' }));
+  var nmIn = el('input', { type:'text', placeholder:'first last (e.g. jane smith)' });
+  var teamSel = el('select');
+  ALL_TEAMS.forEach(function(t){ teamSel.appendChild(el('option', { value:t, text:t + ' — ' + teamMarketLabel(t) })); });
+  var homeIn = el('input', { type:'text', placeholder:'home city|state (e.g. bowie|md)' });
+  body.appendChild(el('div', { class:'row' }, [
+    el('div', { class:'col grow' }, [nmIn]),
+    el('div', { class:'col' }, [teamSel]),
+    el('div', { class:'col grow' }, [homeIn]),
+    el('button', { class:'sm primary', text:'Add rep', onclick:function(){
+      var c = E.canon(nmIn.value, aliasAll());
+      var home = homeIn.value.trim().toLowerCase();
+      if(!c || c.split(' ').length < 2){ alert('Enter a first and last name.'); return; }
+      if(home && home.indexOf('|') < 0) home += '|md';
+      if(!/^[a-z][a-z .\-]*\|[a-z]{2}$/.test(home)){ alert('Home must be "city|state", e.g. crofton|md.'); return; }
+      store.manualReps[c] = { team: teamSel.value, home: home };
+      var ix = store.removedReps.indexOf(c);
+      if(ix >= 0) store.removedReps.splice(ix, 1);   // re-hiring un-hides them
+      save(); refreshRefs(); buildRoster(); renderRepsEditor();
+    }})
+  ]));
+
+  // --- manually added list ---
+  var manual = Object.keys(store.manualReps).sort();
+  if(manual.length){
+    var mlist = el('div', { class:'scroll' });
+    manual.forEach(function(c){
+      var v = store.manualReps[c];
+      var onRanking = !!(store.refs && store.refs.rank && store.refs.rank[c]);
+      mlist.appendChild(el('div', { class:'kv' }, [
+        el('span', { class:'k', text: E.title(c) }),
+        el('span', { class:'mono', text: v.team + ' · ' + v.home + (onRanking ? ' · now on the ranking — safe to remove this entry' : '') }),
+        el('button', { class:'sm danger', text:'Remove', onclick:function(){
+          delete store.manualReps[c]; save(); refreshRefs(); buildRoster(); renderRepsEditor();
+        }})
+      ]));
+    });
+    body.appendChild(el('div', { class:'col' }, [ el('label', { class:'lbl', text:'Added by hand' }), mlist ]));
+  }
+
+  // --- hide a departed rep ---
+  body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
+    text:'Rep left the company (or on leave)? Hide them — they disappear from every roster and preset until restored. They\'ll also stay hidden even while old reference files still list them.' }));
+  var allKnown = Object.keys(rankAll()).filter(function(c){ return !isRemoved(c); }).sort();
+  var hideSel = el('select');
+  hideSel.appendChild(el('option', { value:'', text:'Pick a rep to hide…' }));
+  allKnown.forEach(function(c){ hideSel.appendChild(el('option', { value:c, text:E.title(c) })); });
+  body.appendChild(el('div', { class:'row' }, [
+    el('div', { class:'col grow' }, [hideSel]),
+    el('button', { class:'sm danger', text:'Hide rep', onclick:function(){
+      if(!hideSel.value) return;
+      if(!confirm('Hide ' + E.title(hideSel.value) + ' from all rosters?')) return;
+      store.removedReps.push(hideSel.value);
+      save(); refreshRefs(); buildRoster(); renderRepsEditor();
+    }})
+  ]));
+
+  // --- hidden list ---
+  if(store.removedReps.length){
+    var rlist = el('div', { class:'scroll' });
+    store.removedReps.slice().sort().forEach(function(c){
+      rlist.appendChild(el('div', { class:'kv' }, [
+        el('span', { class:'k', text: E.title(c) }),
+        el('span', { class:'mono', text:'hidden from all rosters' }),
+        el('button', { class:'sm', text:'Restore', onclick:function(){
+          var ix = store.removedReps.indexOf(c);
+          if(ix >= 0) store.removedReps.splice(ix, 1);
+          save(); refreshRefs(); buildRoster(); renderRepsEditor();
+        }})
+      ]));
+    });
+    body.appendChild(el('div', { class:'col' }, [ el('label', { class:'lbl', text:'Hidden reps' }), rlist ]));
+  }
+
+  box.appendChild(body); host.appendChild(box);
+  box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+$('#btnReps').addEventListener('click', renderRepsEditor);
+
 $('#btnCaps').addEventListener('click', function(){
   var host = $('#editorHost'); host.innerHTML = '';
   var box = el('section', { class:'panel' });
@@ -2578,7 +2705,7 @@ $('#btnProd').addEventListener('click', function(){
 });
 
 // ---------------- settings backup ----------------
-var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude'];
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps'];
 $('#btnExport').addEventListener('click', function(){
   var out = { version:2, exported:new Date().toISOString() };
   BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
@@ -2594,7 +2721,12 @@ $('#importFile').addEventListener('change', function(){
   f.text().then(function(t){
     var o = JSON.parse(t);
     BACKUP_FIELDS.forEach(function(k){
-      if(o[k]) Object.keys(o[k]).forEach(function(x){ store[k][x] = o[k][x]; });
+      if(!o[k]) return;
+      if(Array.isArray(store[k])){
+        o[k].forEach(function(x){ if(store[k].indexOf(x) < 0) store[k].push(x); });
+      } else {
+        Object.keys(o[k]).forEach(function(x){ store[k][x] = o[k][x]; });
+      }
     });
     save(); refreshRefs(); refreshPresets(); buildRoster();
     alert('Settings restored. Your reference spreadsheets are not part of this file — re-upload those if this is a new device.');
@@ -2606,7 +2738,7 @@ $('#btnWipe').addEventListener('click', function(){
   localStorage.removeItem(KEY);
   localStorage.removeItem(OLD_KEY);
   localStorage.removeItem(BOARDS_KEY);
-  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{} };
+  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{}, manualReps:{}, removedReps:[] };
   load(); refreshRefs(); refreshPresets(); buildRoster();
   renderBoardsList(); refreshSavedPriorSel();
 });
