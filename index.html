@@ -177,6 +177,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
 
     <div class="row">
       <button class="sm" id="btnGeo">City coordinates (<span id="geoCount">0</span>)</button>
+      <button class="sm" id="btnCityFix">City spelling fixes (<span id="cityFixCount">0</span>)</button>
       <button class="sm" id="btnHomeOv">Home overrides (<span id="hoCount">0</span>)</button>
       <button class="sm" id="btnAlias">Name aliases (<span id="aliasCount">0</span>)</button>
       <button class="sm" id="btnProd">Product mappings (<span id="prodCount">0</span>)</button>
@@ -1386,7 +1387,8 @@ var store = {
   ceil: {}, floor: {},      // per-market overrides (ceil retired — drive no longer caps)
   bottomExclude: {},        // per-market extra exclusions on top of defaults? (kept for future UI)
   manualReps: {},           // reps added by hand before they're on the ranking: { canon: {team, home} }
-  removedReps: []           // reps hidden from every roster (departed / on leave)
+  removedReps: [],          // reps hidden from every roster (departed / on leave)
+  cityFixes: {}             // misspelling -> real city: { 'balitmore|md': 'baltimore|md' }
 };
 function load(){
   try {
@@ -1416,6 +1418,7 @@ function load(){
   if(!store.bottomExclude) store.bottomExclude = {};
   if(!store.manualReps) store.manualReps = {};
   if(!store.removedReps) store.removedReps = [];
+  if(!store.cityFixes) store.cityFixes = {};
 }
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify(store)); }
@@ -1660,6 +1663,7 @@ function refreshRefs(){
   if(!ready) $('#setupPanel').classList.remove('collapsed'), $('#setupToggle').setAttribute('aria-expanded','true'), $('#setupToggle').textContent = 'Close';
   $('#geoCount').textContent = Object.keys(store.geo).length;
   $('#repsCount').textContent = Object.keys(store.manualReps).length + store.removedReps.length;
+  $('#cityFixCount').textContent = Object.keys(store.cityFixes).length;
   $('#hoCount').textContent = Object.keys(store.homeOverrides).length;
   $('#aliasCount').textContent = Object.keys(store.aliases).length;
   $('#prodCount').textContent = Object.keys(store.prodMap).length;
@@ -1692,6 +1696,39 @@ function rankAll(){
   return r;
 }
 function isRemoved(c){ return store.removedReps.indexOf(c) >= 0; }
+
+// ---------------- city spelling corrections ----------------
+// A lead sheet sometimes carries a typo'd city ("Balitmore"). A correction maps
+// 'balitmore|md' -> 'baltimore|md' so the drive time resolves and the board shows
+// the real name. The original is kept on the row and surfaced as a flag — nothing
+// is silently rewritten.
+function cityKey(city, state){
+  return String(city||'').trim().toLowerCase() + '|' + String(state||'').trim().toLowerCase();
+}
+function lookupCityFix(city, state){
+  var k = cityKey(city, state);
+  if(store.cityFixes[k]) return store.cityFixes[k];
+  // also honor a state-less correction so a fix works before we know the state
+  var bare = String(city||'').trim().toLowerCase() + '|';
+  var hit = Object.keys(store.cityFixes).filter(function(x){ return x === bare || x.indexOf(bare) === 0; })[0];
+  return hit ? store.cityFixes[hit] : null;
+}
+// Returns a shallow-copied row set with corrected City/State. Rows without a fix
+// are passed through untouched (same object), so nothing else changes.
+function applyCityFixes(rows){
+  if(!Object.keys(store.cityFixes).length) return rows;
+  return rows.map(function(row){
+    var fix = lookupCityFix(row['City'], row['State']);
+    if(!fix) return row;
+    var parts = fix.split('|');
+    var copy = Object.assign({}, row);
+    copy._cityOriginal = row['City'];
+    copy._stateOriginal = row['State'];
+    copy['City'] = E.title(parts[0]);
+    if(parts[1]) copy['State'] = parts[1].toUpperCase();
+    return copy;
+  });
+}
 function currentRoster(){
   if(!state.rosters[state.market]) state.rosters[state.market] = {};
   return state.rosters[state.market];
@@ -1914,7 +1951,7 @@ $('#btnRerun').addEventListener('click', function(){ doRun(); });
 function doRun(){
   var common = {
     slot: state.slot,
-    leads: state.leadData.rows,
+    leads: applyCityFixes(state.leadData.rows),
     bathRoster: bathRosterList(),
     rank: rankAll(),
     d60: store.refs.d60,
@@ -1943,6 +1980,11 @@ function doRun(){
     }
   }
   catch(err){ alert('Run failed: ' + err.message); console.error(err); return; }
+  // note any spelling corrections on the rows they affected
+  r.rows.concat(r.bathRows).forEach(function(x){
+    if(x.lead && x.lead._cityOriginal)
+      x.flags.push('city spelling corrected from "' + x.lead._cityOriginal + '"');
+  });
   state.result = r;
   renderGeoForm(r.missingGeo);
   renderResult(r);
@@ -2014,14 +2056,37 @@ function renderGeoForm(missing){
       if(!$('#geoForm').querySelectorAll('.row').length) $('#geoPanel').hidden = true;
     }}, [document.createTextNode('Save')]);
 
+    // "It's a typo" path: map this spelling onto a city we already know
+    var fixSel = el('select', { style:'max-width:200px' });
+    fixSel.appendChild(el('option', { value:'', text:'…or fix spelling → pick real city' }));
+    Object.keys(geoAll()).sort().forEach(function(k){
+      var p = k.split('|');
+      fixSel.appendChild(el('option', { value:k, text: E.title(p[0]) + (p[1] ? ', ' + p[1].toUpperCase() : '') }));
+    });
+    fixSel.addEventListener('change', function(){
+      if(!fixSel.value) return;
+      var target = fixSel.value;
+      if(!confirm('Treat "' + E.title(city) + (state ? ', ' + state.toUpperCase() : '') +
+                  '" as a misspelling of "' + E.title(target.split('|')[0]) + ', ' + target.split('|')[1].toUpperCase() +
+                  '"?\n\nFuture lead sheets with this spelling will be corrected automatically.')){
+        fixSel.value = ''; return;
+      }
+      store.cityFixes[cityKey(city, state)] = target;
+      save(); refreshRefs();
+      row.remove();
+      if(!$('#geoForm').querySelectorAll('.row').length) $('#geoPanel').hidden = true;
+      $('#btnRerun').classList.add('primary');
+      alert('Saved. Hit "Re-run with pins" (or Run again) to apply the corrected city.');
+    });
+
     var row = el('div', { class:'row', style:'align-items:center;margin-bottom:8px' }, [
       el('b', { text: E.title(city) + (state ? ', ' + state.toUpperCase() : ''), style:'min-width:150px' }),
-      gmaps, paste, lat, lon, lookup, saveBtn, msg
+      gmaps, paste, lat, lon, lookup, saveBtn, fixSel, msg
     ]);
     host.appendChild(row);
   });
   host.appendChild(el('p', { class:'muted', style:'margin:4px 0 0;font-size:12px',
-    text:'Click Google Maps, right-click the exact spot, choose “What’s here?”, then click the coordinates it shows (that copies them) and paste into the box. Or use Auto-lookup (OpenStreetMap) and verify. Saved here forever, on this browser.' }));
+    text:'Real new city: click Google Maps, right-click the exact spot, choose “What’s here?”, then click the coordinates it shows (that copies them) and paste into the box — or use Auto-lookup and verify. Misspelled on the lead sheet: use the “fix spelling” dropdown instead to point it at the real city. Both are saved on this browser forever.' }));
 }
 
 // ---------------- saved boards ----------------
@@ -2544,6 +2609,63 @@ $('#btnGeo').addEventListener('click', function(){
     }
   });
 });
+$('#btnCityFix').addEventListener('click', function(){
+  var host = $('#editorHost'); host.innerHTML = '';
+  var box = el('section', { class:'panel' });
+  var body = el('div', { class:'body' });
+  box.appendChild(el('div', { class:'head' }, [
+    el('h2', { text:'City spelling fixes' }),
+    el('span', { class:'spacer' }),
+    el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
+  ]));
+  body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
+    text:'When SAP spells a city wrong, map the bad spelling to the real city. Every future lead sheet with that spelling is corrected automatically — the board shows the right name and the drive time works. The original spelling is kept in the Assignment Flag so nothing is hidden.' }));
+
+  var list = el('div', { class:'scroll' });
+  function redraw(){
+    list.innerHTML = '';
+    var keys = Object.keys(store.cityFixes).sort();
+    if(!keys.length) list.appendChild(el('span', { class:'muted', text:'no corrections saved yet' }));
+    keys.forEach(function(k){
+      var v = store.cityFixes[k];
+      var kp = k.split('|'), vp = v.split('|');
+      list.appendChild(el('div', { class:'kv' }, [
+        el('span', { class:'k', text: E.title(kp[0]) + (kp[1] ? ', ' + kp[1].toUpperCase() : '') }),
+        el('span', { class:'mono', text: '→ ' + E.title(vp[0]) + (vp[1] ? ', ' + vp[1].toUpperCase() : '') }),
+        el('button', { class:'sm danger', text:'Remove', onclick:function(){
+          delete store.cityFixes[k]; save(); redraw(); refreshRefs();
+        }})
+      ]));
+    });
+  }
+  redraw();
+
+  var badIn = el('input', { type:'text', placeholder:'wrong spelling (e.g. balitmore|md)' });
+  var goodSel = el('select');
+  goodSel.appendChild(el('option', { value:'', text:'real city…' }));
+  Object.keys(geoAll()).sort().forEach(function(k){
+    var p = k.split('|');
+    goodSel.appendChild(el('option', { value:k, text: E.title(p[0]) + (p[1] ? ', ' + p[1].toUpperCase() : '') }));
+  });
+  body.appendChild(list);
+  body.appendChild(el('div', { class:'row' }, [
+    el('div', { class:'col grow' }, [badIn]),
+    el('div', { class:'col grow' }, [goodSel]),
+    el('button', { class:'sm primary', text:'Add fix', onclick:function(){
+      var bad = badIn.value.trim().toLowerCase();
+      if(bad && bad.indexOf('|') < 0) bad += '|md';
+      if(!/^[a-z][a-z .\-]*\|[a-z]{2}$/.test(bad)){ alert('Wrong spelling must be "city|state", e.g. balitmore|md'); return; }
+      if(!goodSel.value){ alert('Pick the real city.'); return; }
+      if(bad === goodSel.value){ alert('That maps a city to itself.'); return; }
+      store.cityFixes[bad] = goodSel.value;
+      save(); redraw(); refreshRefs();
+      badIn.value = ''; goodSel.value = '';
+    }})
+  ]));
+  box.appendChild(body); host.appendChild(box);
+  box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+});
+
 $('#btnHomeOv').addEventListener('click', function(){
   keyValEditor('Home overrides', store.homeOverrides, {
     help:'For reps not yet in the phone-list export, or whose listed home is wrong. Format the home as "city|state".',
@@ -2705,7 +2827,7 @@ $('#btnProd').addEventListener('click', function(){
 });
 
 // ---------------- settings backup ----------------
-var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps'];
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps','cityFixes'];
 $('#btnExport').addEventListener('click', function(){
   var out = { version:2, exported:new Date().toISOString() };
   BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
@@ -2738,7 +2860,7 @@ $('#btnWipe').addEventListener('click', function(){
   localStorage.removeItem(KEY);
   localStorage.removeItem(OLD_KEY);
   localStorage.removeItem(BOARDS_KEY);
-  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{}, manualReps:{}, removedReps:[] };
+  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{}, manualReps:{}, removedReps:[], cityFixes:{} };
   load(); refreshRefs(); refreshPresets(); buildRoster();
   renderBoardsList(); refreshSavedPriorSel();
 });
