@@ -21,7 +21,7 @@ Everything runs inside your browser. Nothing you upload leaves the machine.
 3. Chip on the top-right turns green: "reference data: loaded". Setup panel collapses.
 4. Every shift after that:
    - Pick **market** — DC Metro, Hampton Roads, or Richmond
-   - Pick **AM / PM / EVE**
+   - Pick **AM / PM / EVE / Tomorrow AM**
    - Drop this shift's lead sheet (SAP Resource Planning export)
    - For PM: also drop the AM board. For EVE: drop AM then PM, most recent last.
    - Check off the **field reps** working today
@@ -43,6 +43,8 @@ After a run, click **Save board** (next to Download). The finished board is stor
 - **Download** — rebuild the same .xlsx, even days later
 - **Chain from this** — use it as the prior board for drive chaining
 - **Delete** — remove it
+
+**Building tomorrow's morning tonight:** pick the **Tomorrow AM** slot. It behaves exactly like AM (everyone starts from home, no prior board needed) but files under **tomorrow's date** — run it on 7/27 and it saves and downloads as **7/28 AM**. When you run the real AM tomorrow morning, it lands in that same slot and updates the board you pre-built instead of creating a duplicate. Today's own AM board is untouched.
 
 **The big time-saver:** for PM and EVE you no longer need to re-upload the AM file. Pick the saved AM board from the **"…or chain from a saved board"** dropdown next to the prior-board box. For EVE, pick AM first, then PM — the most recent pick wins, same as file uploads. Saved boards live only in that browser (they're not in the settings backup), so save the .xlsx too if you need a permanent copy.
 
