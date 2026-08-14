@@ -428,6 +428,78 @@ function runAll(E){
     eq('counts.pinned', r.counts.pinned, 1);
   })();
 
+  group('Bare rep name in notes pins them (rule 2026-07-27)');
+  (function(){
+    var crew = ['franklin hill','stephen bryan','titus smith','jacob szczepanik','will perna','joshua brown'];
+    // full name anywhere — no trigger phrase needed
+    eq('"stephen bryan wants this one" → pinned',
+       E.findNotePins('stephen bryan wants this one', crew), 'stephen bryan');
+    eq('full name mid-sentence', E.findNotePins('sfh, 6 windows, cust asked for titus smith', crew), 'titus smith');
+    // bare surname, unambiguous and not a common word
+    eq('bare surname "szczepanik"', E.findNotePins('szczepanik knows this street', crew), 'jacob szczepanik');
+    eq('bare first name "stephen"', E.findNotePins('stephen has the history here', crew), 'stephen bryan');
+    // match type is reported so the UI can flag it
+    eq('trigger still reported as trigger',
+       E.findNotePinDetail('send stephen bryan', crew).match, 'trigger');
+    eq('full-name mention reported as full',
+       E.findNotePinDetail('stephen bryan wants this', crew).match, 'full');
+    eq('surname mention reported as last',
+       E.findNotePinDetail('szczepanik knows it', crew).match, 'last');
+
+    // GUARD: names that are ordinary words must not pin on a bare mention
+    eq('"customer will be home" does NOT pin Will Perna',
+       E.findNotePins('customer will be home at 9', crew), null);
+    eq('"brown siding" does NOT pin Joshua Brown',
+       E.findNotePins('wants brown siding quoted', crew), null);
+    eq('"on the hill" does NOT pin Franklin Hill',
+       E.findNotePins('house is on the hill', crew), null);
+    eq('…but the FULL name still pins through a stopword',
+       E.findNotePins('will perna should take this', crew), 'will perna');
+    eq('…and an explicit trigger still pins through a stopword',
+       E.findNotePins('send will', crew), 'will perna');
+
+    // GUARD: negative context
+    eq('"do not send titus" does not pin', E.findNotePins('do not send titus smith', crew), null);
+    eq('"anyone other than titus smith"', E.findNotePins('anyone other than titus smith', crew), null);
+    eq('"titus smith cancelled"', E.findNotePins('titus smith cancelled last visit', crew), null);
+    // GUARD: past-tense context
+    eq('"titus smith ran this last year"', E.findNotePins('titus smith ran this last year', crew), null);
+    eq('"szczepanik already came out"', E.findNotePins('szczepanik already came out', crew), null);
+    // GUARD: prior-customer history never pins
+    eq('name only after pre-cust is ignored',
+       E.findNotePins('6 windows. pre-cust: stephen bryan sold them a door', crew), null);
+    // GUARD: the customer's own name never pins (found on a real 7/14 sheet —
+    // customer "Colin Gillespie" was pinning rep Colin Kelly)
+    var crew2 = ['colin kelly','titus smith'];
+    eq('customer first name does not pin a same-named rep',
+       E.findNotePins('colin wants a morning slot', crew2, 'Colin Gillespie'), null);
+    eq('customer surname does not pin a same-named rep',
+       E.findNotePins('smith residence, gate code 1234', crew2, 'Bob Smith'), null);
+    eq('…but an explicit instruction still wins over the customer name',
+       E.findNotePins('send colin kelly', crew2, 'Colin Gillespie'), 'colin kelly');
+    eq('…and a different rep in the same note still pins',
+       E.findNotePins('colin is the cust, titus knows the street', crew2, 'Colin Gillespie'), 'titus smith');
+
+    // ambiguity unchanged
+    eq('ambiguous first name still no pin', E.findNotePins('james is the contact', ['james archy','james dunn']), null);
+    eq('a name that is not on the roster does not pin', E.findNotePins('ask for batman', crew), null);
+
+    // end-to-end: bare mention wins the lead before optimization
+    var leads = [
+      mkLead({ 'Customer Name':'Named One', 'Notes':'cust asked for franklin hill', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Normal', 'Notes':'6 windows', 'City':'Bowie' })
+    ];
+    // frank is the weaker rep — without the pin the optimizer would not pick him here
+    var reps = [rep('franklin hill','bowie', { Windows:{ leads:20, nsli:2000, close:10 } }), rep('titus smith','bowie')];
+    var r = E.run(mkInput(leads, reps));
+    var pinned = r.rows.filter(function(x){ return x.pinned; });
+    eq('exactly one pinned row', pinned.length, 1);
+    eq('pinned to the named rep', pinned[0].rep.c, 'franklin hill');
+    ok('flag explains the bare-name pin', /appears in the notes/.test(pinned[0].flags[0]), pinned[0].flags[0]);
+    eq('the other lead is optimized around him',
+       r.rows.filter(function(x){ return !x.pinned; })[0].rep.c, 'titus smith');
+  })();
+
   group('Manual pin (UI dropdown)');
   (function(){
     var leads = [ mkLead({ 'Customer Name':'A', 'City':'Bowie' }), mkLead({ 'Customer Name':'B', 'City':'Bowie' }) ];

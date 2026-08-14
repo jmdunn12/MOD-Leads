@@ -130,6 +130,27 @@ These show up in the Notes field from the call center. The counting ones feed th
 
 If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
 
+## Rep names in the notes
+
+**If a rep's name appears in a lead's notes, that rep gets the lead.** They're pinned before the optimizer runs and pulled from the pool, so nobody else can take it. Works with or without an instruction:
+
+- `"Send Stephen Bryan"` / `"Frank Hill to run lead"` — explicit, strongest signal
+- `"cust asked for titus smith"` / `"szczepanik knows this street"` — a plain mention counts too
+
+Every pin that came from a bare mention (no "send"/"give"/"to run") is flagged on the row — `PINNED — "titus" appears in the notes` — and all of them are listed in a **"Pinned because a rep name is in the notes — check these"** notice above the board, so they're easy to scan and override with the Pin dropdown.
+
+Guards, so this doesn't misfire on ordinary notes:
+
+| Note | Result |
+|---|---|
+| `"customer will be home"` | no pin — first names that are everyday words (Will, Mark, Brown, Hill…) need the full name or an instruction |
+| `"wants brown siding"` | no pin, same reason |
+| `"do not send Titus"` / `"anyone other than Titus Smith"` | no pin — negative context |
+| `"Titus ran this last year"` | no pin — past tense |
+| anything after `pre-cust` | no pin — that's prior-customer history |
+| lead for customer **Colin** Gillespie, rep **Colin** Kelly | no pin — the customer's own name never pins |
+| `"james is the contact"` with two Jameses on the roster | no pin — ambiguous |
+
 **Window ranges set a tier floor** (they can raise a lead's tier, never lower it):
 
 | Notes say | Tier floor |

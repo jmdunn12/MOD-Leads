@@ -796,23 +796,97 @@ function classifySkip(lead, market){
 }
 
 // ---------------- note pins ----------------
-function findNotePins(notes, availCanon){
+// Manager rule (2026-07-27): ANY rep name in the notes pins that rep to the lead.
+// An explicit phrase ("send Stephen Bryan", "Frank Hill to run") is still the
+// strongest signal; a bare mention now counts too, with guards so ordinary words
+// and negative/past mentions don't hijack a lead.
+
+// Single-word names that are also everyday words in these notes. A BARE match on
+// one of these never pins — the full name (or a trigger phrase) still does.
+var NAME_STOPWORDS = ['will','mark','bill','rich','art','grant','chase','may','june','dawn','rose',
+  'joy','hope','faith','summer','winter','sunny','young','major','sharp','price','king','baker',
+  'porter','carter','miller','mason','glass','storm','stone','wood','french','brown','white','black',
+  'gray','grey','green','hill','long','short','bay','bow','case','frank','norm','angel','victor','christian'];
+// A mention inside one of these contexts is not an instruction to assign.
+var PIN_NEGATION = /\b(?:not|no|never|don'?t|do not|avoid|except|instead of|rather than|cancel(?:l?ed)?|reassign|remove|replace|drop|unassign|wrong|other than)\b/;
+var PIN_PAST = /\b(?:ran|already|previously|prior|last (?:time|year|visit|week)|came out|was here|has been out)\b/;
+function escRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+// Look at the text immediately around a match for a disqualifying context.
+// `strict` marks a bare/full NAME match (no instruction verb): those are checked for
+// negative and past-tense context on both sides, since the name alone carries no intent.
+function pinContextBlocked(text, idx, len, strict){
+  var before = text.slice(Math.max(0, idx - 45), idx);
+  var after = text.slice(idx + len, idx + len + 30);
+  if(PIN_NEGATION.test(before)) return true;
+  if(strict && (PIN_NEGATION.test(after) || PIN_PAST.test(before) || PIN_PAST.test(after))) return true;
+  return false;
+}
+
+// Returns { rep, match:'trigger'|'full'|'last'|'first', token } or null.
+// customerName (optional) blocks bare matches on the customer's own name — a lead for
+// "Colin Gillespie" must not pin rep Colin Kelly just because the notes say "colin".
+function findNotePinDetail(notes, availCanon, customerName){
+  // prior-customer history often names the rep who ran it before — never pin off that
+  var nt = String(notes||'').toLowerCase().split('pre-cust')[0];
+  if(!nt.trim() || !availCanon.length) return null;
+  var custTokens = {};
+  String(customerName||'').toLowerCase().split(/[^a-z]+/).forEach(function(t){ if(t) custTokens[t] = true; });
+
   var byName = {};
   availCanon.forEach(function(c){
     var parts = c.split(' ');
     [parts[parts.length-1], parts[0]].forEach(function(p){
       if(!byName[p]) byName[p] = [];
-      if(byName[p].indexOf(c)<0) byName[p].push(c);
+      if(byName[p].indexOf(c) < 0) byName[p].push(c);
     });
   });
-  var nt = String(notes||'').toLowerCase();
-  var hits = all(/\b(?:send|assign|give|have|book)\s+(?:it\s+|this\s+|to\s+)*([a-z]+)/, nt).map(function(m){ return m[1]; })
-    .concat(all(/\b([a-z]+)\s+to\s+run\b/, nt).map(function(m){ return m[1]; }));
-  for(var i=0;i<hits.length;i++){
-    var cand = byName[hits[i]];
-    if(cand && cand.length===1) return cand[0];
+
+  // 1) explicit instruction — strongest signal
+  var trig = all(/\b(?:send|assign|give|have|book)\s+(?:it\s+|this\s+|to\s+)*([a-z]+)/, nt)
+    .concat(all(/\b([a-z]+)\s+to\s+run\b/, nt));
+  for(var i = 0; i < trig.length; i++){
+    var cand = byName[trig[i][1]];
+    if(cand && cand.length === 1 && !pinContextBlocked(nt, trig[i].index, trig[i][0].length, false))
+      return { rep: cand[0], match:'trigger', token: trig[i][1] };
+  }
+
+  // 2) full name anywhere in the notes — unambiguous by construction
+  for(var j = 0; j < availCanon.length; j++){
+    var c2 = availCanon[j];
+    var re = new RegExp('\\b' + c2.split(' ').map(escRe).join('\\s+') + '\\b');
+    var m = re.exec(nt);
+    if(m && !pinContextBlocked(nt, m.index, m[0].length, true))
+      return { rep: c2, match:'full', token: c2 };
+  }
+
+  // 3) bare surname, then bare first name — only when unambiguous and not a common word
+  var order = [], seenLast = {}, seenFirst = {};
+  availCanon.forEach(function(c){
+    var p = c.split(' '), last = p[p.length-1], first = p[0];
+    if(!seenLast[last]){ seenLast[last] = true; order.push({ tok:last, kind:'last' }); }
+  });
+  availCanon.forEach(function(c){
+    var first = c.split(' ')[0];
+    if(!seenFirst[first]){ seenFirst[first] = true; order.push({ tok:first, kind:'first' }); }
+  });
+  for(var k = 0; k < order.length; k++){
+    var tok = order[k].tok;
+    if(NAME_STOPWORDS.indexOf(tok) >= 0) continue;
+    if(custTokens[tok]) continue;   // it's the customer's own name, not an instruction
+    var owners = byName[tok];
+    if(!owners || owners.length !== 1) continue;
+    var re2 = new RegExp('\\b' + escRe(tok) + '\\b');
+    var m2 = re2.exec(nt);
+    if(m2 && !pinContextBlocked(nt, m2.index, m2[0].length, true))
+      return { rep: owners[0], match: order[k].kind, token: tok };
   }
   return null;
+}
+
+// Back-compat wrapper: the canonical name, or null.
+function findNotePins(notes, availCanon, customerName){
+  var d = findNotePinDetail(notes, availCanon, customerName);
+  return d ? d.rep : null;
 }
 
 // ---------------- lead detail parsing ----------------
@@ -940,8 +1014,8 @@ function run(input){
   var pins = {};
   leads.forEach(function(l, i){
     if(dropped[i]) return;
-    var r = findNotePins(l['Notes'], combinedC);
-    if(r) pins[i] = { rep:r, source:'note' };
+    var det = findNotePinDetail(l['Notes'], combinedC, l['Customer Name']);
+    if(det) pins[i] = { rep:det.rep, source:'note', match:det.match, token:det.token };
   });
   Object.keys(input.manualPins || {}).forEach(function(k){
     var i = parseInt(k,10), rep = canon(input.manualPins[k], aliases);
@@ -1151,6 +1225,9 @@ function run(input){
       flags:['PINNED per note -> ' + title(c)], state:'pin', pinned:true,
       board: d.isBathLead ? 'bath' : 'field' };
     if(pins[i].source === 'manual') row.flags = ['PINNED by hand -> ' + title(c)];
+    else if(pins[i].match && pins[i].match !== 'trigger')
+      // name appeared in the notes without an explicit "send X" — say so plainly
+      row.flags = ['PINNED — "' + pins[i].token + '" appears in the notes -> ' + title(c)];
     if(!d.isBathLead && isBathRep) row.flags.push('PIN OVERRIDE: Kappa (bath) rep pinned on field lead');
     if(d.isBathLead && !isBathRep) row.flags.push('OVERFLOW pin: field rep on bath lead');
     if(dm !== null && dm > 75) row.flags.push('verify drive ~' + Math.round(dm) + 'm');
@@ -1349,7 +1426,8 @@ global.ENGINE = {
   windowRangeFloor: windowRangeFloor, TIER_RANK: TIER_RANK,
   haversine: haversine, driveMinutes: driveMinutes,
   hungarianMin: hungarianMin, hungarianMax: hungarianMax,
-  classifySkip: classifySkip, findNotePins: findNotePins,
+  classifySkip: classifySkip, findNotePins: findNotePins, findNotePinDetail: findNotePinDetail,
+  NAME_STOPWORDS: NAME_STOPWORDS,
   makeScorer: makeScorer, global60Of: global60Of, run: run, runAllMarkets: runAllMarkets
 };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2305,6 +2383,12 @@ function renderResult(r){
     longDrives.map(function(x){ return x.rep.disp + ' → ' + x.lead['City'] + ' (' + x.drive + 'm from ' + x.origin + ')'; }));
   var unf = r.rows.concat(r.bathRows).filter(function(x){ return !x.rep; });
   if(unf.length) notice('bad', 'Unfilled leads:', unf.map(function(x){ return (x.lead['Customer Name']||'?') + ' — ' + x.flags[0]; }));
+  var namePins = r.rows.concat(r.bathRows).filter(function(x){
+    return x.pinned && /appears in the notes/.test(x.flags[0]);
+  });
+  if(namePins.length) notice('info', 'Pinned because a rep name is in the notes — check these:',
+    namePins.map(function(x){ return (x.rep ? x.rep.disp : '?') + ' → ' + (x.lead['Customer Name']||'?') +
+      ' (' + (x.lead['City']||'') + ')'; }));
   if(r.overflowUsed) notice('warn', 'Bath overflow pulled from the field bench:',
     r.bathRows.filter(function(x){ return x.overflow; }).map(function(x){ return x.rep.disp + ' → ' + x.lead['Customer Name'] + ' (' + x.lead['City'] + ')'; }));
 
