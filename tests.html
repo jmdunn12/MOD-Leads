@@ -322,6 +322,52 @@ function runAll(E){
       tf('2 storms', 'COMBO_WIND_DOOR').tier, 'MEDIUM');
   })();
 
+  group('Hand-edited Opportunity drives the tier (rule 2026-07-28)');
+  (function(){
+    function t(s){ return E.tierOfOpportunity(E.describeOpportunity(s)); }
+    // the board's own compact format round-trips
+    eq('"8W 2D 1 siding" → BIG', t('8W 2D 1 siding'), 'BIG');
+    eq('"8W" parses w=8', E.describeOpportunity('8W').w, 8);
+    eq('"2D" parses d=2', E.describeOpportunity('2D').d, 2);
+    eq('"6W" → MEDIUM', t('6W'), 'MEDIUM');
+    eq('"3W" → SMALL', t('3W'), 'SMALL');
+    eq('"7 windows" → BIG', t('7 windows'), 'BIG');
+    eq('"2D" → MEDIUM', t('2D'), 'MEDIUM');
+    eq('"1 fed" → MEDIUM (front-entry)', t('1 fed'), 'MEDIUM');
+    eq('"1 roof" → MEDIUM', t('1 roof'), 'MEDIUM');
+    eq('"1 siding" → BIG', t('1 siding'), 'BIG');
+    eq('"5W 2D" → BIG (5+2 rule)', t('5W 2D'), 'BIG');
+    eq('"2W 1D 1 Gutt" → BIG (3 components)', t('2W 1D 1 Gutt'), 'BIG');
+    eq('"3-5 windows" → BIG (range floor applies)', t('3-5 windows'), 'BIG');
+    eq('"3 storm doors" → SMALL (storm-only rule applies)', t('3 storm doors'), 'SMALL');
+    eq('"3 sd" → SMALL', t('3 sd'), 'SMALL');
+    eq('empty → SMALL', t(''), 'SMALL');
+
+    // end-to-end: original sheet value first, edit overrides, tier + matrix follow
+    var leads = [ mkLead({ 'Customer Name':'Edit Me', 'Product':'WINDOWS', 'Notes':'3 windows', 'City':'Bowie' }) ];
+    var reps = [rep('titus smith','bowie')];
+    var base = E.run(mkInput(leads, reps));
+    eq('no edit: tier from the sheet (3 windows → SMALL)', base.rows[0].tier, 'SMALL');
+    eq('no edit: opp from the sheet', base.rows[0].opp, '3W');
+    var edited = E.run(mkInput(leads, reps, { oppOverrides: { 0: '8W 1 siding' } }));
+    eq('edited: tier recalculated → BIG', edited.rows[0].tier, 'BIG');
+    eq('edited: opp reflects the edit', edited.rows[0].opp, '8W 1 siding');
+    ok('edited: flagged on the row',
+      edited.rows[0].flags.some(function(f){ return /Opportunity edited by hand/.test(f); }),
+      JSON.stringify(edited.rows[0].flags));
+    var down = E.run(mkInput(leads, reps, { oppOverrides: { 0: '2 storm doors' } }));
+    eq('edit can also downgrade (storm-only → SMALL)', down.rows[0].tier, 'SMALL');
+    // BIG floor honors the edited tier: weak rep + edit to siding → unfilled
+    var weak = rep('titus smith','bowie');
+    ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
+    var inpW = mkInput([ mkLead({ 'Customer Name':'Weak', 'Product':'WINDOWS', 'Notes':'3 windows', 'City':'Bowie' }) ], [weak],
+      { oppOverrides: { 0: '1 siding' } });
+    inpW.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
+    inpW.global60 = 500;
+    var rW = E.run(inpW);
+    ok('edited-to-BIG lead respects the BIG floor', rW.rows[0].rep === null, JSON.stringify(rW.rows[0].flags));
+  })();
+
   // ---------- 3. Hungarian ----------
   group('Hungarian / assignment solver');
   (function(){

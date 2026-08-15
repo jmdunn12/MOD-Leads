@@ -639,6 +639,50 @@ function tierOf(prod, w, wk, d, dtypes, prodMap){
   return wincombo ? 'MEDIUM' : 'SMALL';
 }
 
+// ---------------- hand-edited Opportunity field ----------------
+// The manager can overwrite a lead's Opportunity text ("8W 2D 1 siding", "6 windows
+// and a fed", "3-5 windows"...). Parse it with the same machinery as the notes, plus
+// the board's own compact tokens (8W / 2D), and re-derive the tier from what it says.
+function describeOpportunity(text){
+  var s = stripTimes(String(text||'').toLowerCase());
+  var W = parseWindows(s), D = parseDoors(s);
+  var w = W.count, d = D.count, dtypes = D.types.slice();
+  var m, i;
+  // compact "8W" / "8 w" tokens (the board's own format)
+  m = all(/(?<![a-z\d])(\d{1,2})\s*w\b(?!i)/, s);
+  for(i=0;i<m.length;i++) w = Math.max(w, parseInt(m[i][1],10));
+  // compact "2D" / "2 d" tokens
+  m = all(/(?<![a-z\d])(\d{1,2})\s*d\b(?!o)/, s);
+  for(i=0;i<m.length;i++) d = Math.max(d, parseInt(m[i][1],10));
+  var sid  = /\bsid(?:ing)?\b/.test(s);
+  var roof = /\broof/.test(s);
+  var gut  = /\bgutt?(?:ers?)?\b/.test(s);
+  return { w:w, d:d, dtypes:dtypes, sid:sid, roof:roof, gut:gut, ranges:(W.ranges||[]) };
+}
+// Same tier ladder as tierOf, fed purely by the edited facts. Component count for the
+// 3+-combo rule = how many distinct product types the text mentions.
+function tierOfOpportunity(o){
+  var nc = (o.w>0?1:0) + (o.d>0?1:0) + (o.sid?1:0) + (o.roof?1:0) + (o.gut?1:0);
+  var tier;
+  if(o.sid) tier = 'BIG';
+  else if(nc >= 3) tier = 'BIG';
+  else if(o.w >= 7) tier = 'BIG';
+  else if(o.d >= 3) tier = 'BIG';
+  else if(o.w >= 5 && o.d >= 2) tier = 'BIG';
+  else if(o.roof) tier = 'MEDIUM';
+  else if(o.gut && nc >= 2) tier = 'MEDIUM';
+  else if(o.w === 6) tier = 'MEDIUM';
+  else if(o.d === 2) tier = 'MEDIUM';
+  else if(o.d === 1 && o.dtypes.indexOf('front') >= 0) tier = 'MEDIUM';
+  else tier = 'SMALL';
+  var rfloor = windowRangeFloor(o.ranges);
+  if(rfloor && TIER_RANK[rfloor] > TIER_RANK[tier]) tier = rfloor;
+  // storm-doors-only rule applies here too
+  if(o.d > 0 && o.dtypes.length === 1 && o.dtypes[0] === 'storm' &&
+     o.w === 0 && !o.sid && !o.roof && !o.gut) tier = 'SMALL';
+  return tier;
+}
+
 function opportunity(d){
   var parts = [];
   if(d.w) parts.push(d.w+'W');
@@ -1038,6 +1082,18 @@ function run(input){
     L[i].stateAbbr = l['State'] == null ? '' : String(l['State']).trim();
     L[i].isBathLead = bathLeadIdx.indexOf(i) >= 0;
   });
+  // --- hand-edited Opportunity overrides: the edited text is authoritative for
+  // counts/tags/tier (scoring components stay product-driven, parity with Python) ---
+  Object.keys(input.oppOverrides || {}).forEach(function(k){
+    var i = parseInt(k, 10);
+    var text = String(input.oppOverrides[k] || '').trim();
+    if(!L[i] || !text) return;
+    var od = describeOpportunity(text);
+    L[i].w = od.w; L[i].d = od.d; L[i].dtypes = od.dtypes;
+    L[i].sid = od.sid; L[i].roof = od.roof; L[i].gut = od.gut;
+    L[i].tier = tierOfOpportunity(od);
+    L[i].oppEdited = text;
+  });
 
   // --- scorer over the union pool ---
   var ctx = { rank:input.rank, d60:input.d60, global60:input.global60, geo:geo, avail:combinedAvail };
@@ -1206,6 +1262,7 @@ function run(input){
         row.flags = ['UNCOVERED — more leads than available reps (all taken)'];
       row.state = 'bad';
     }
+    if(d.oppEdited) row.flags.push('Opportunity edited by hand ("' + d.oppEdited + '") — tier recalculated');
     if(!d.knownProduct) row.flags.push('unknown product code "' + d.prod + '" — scored as Windows');
     if(d.resched) row.flags.push('notes mention a reschedule — check');
     rows.push(row);
@@ -1231,6 +1288,7 @@ function run(input){
     if(!d.isBathLead && isBathRep) row.flags.push('PIN OVERRIDE: Kappa (bath) rep pinned on field lead');
     if(d.isBathLead && !isBathRep) row.flags.push('OVERFLOW pin: field rep on bath lead');
     if(dm !== null && dm > 75) row.flags.push('verify drive ~' + Math.round(dm) + 'm');
+    if(d.oppEdited) row.flags.push('Opportunity edited by hand ("' + d.oppEdited + '") — tier recalculated');
     if(d.resched) row.flags.push('notes mention a reschedule — check');
     rows.push(row);
   });
@@ -1254,6 +1312,7 @@ function run(input){
       row.flags = ['UNCOVERED — no bath rep free and no field bench left'];
       row.state = 'bad';
     }
+    if(d.oppEdited) row.flags.push('Opportunity edited by hand ("' + d.oppEdited + '") — tier recalculated');
     if(d.resched) row.flags.push('notes mention a reschedule — check');
     bathRows.push(row);
   });
@@ -1423,6 +1482,7 @@ global.ENGINE = {
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
   parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber, stripTimes: stripTimes,
   tierOf: tierOf, opportunity: opportunity, describeLead: describeLead,
+  describeOpportunity: describeOpportunity, tierOfOpportunity: tierOfOpportunity,
   windowRangeFloor: windowRangeFloor, TIER_RANK: TIER_RANK,
   haversine: haversine, driveMinutes: driveMinutes,
   hungarianMin: hungarianMin, hungarianMax: hungarianMax,
@@ -1685,7 +1745,7 @@ var state = { market:'DC Metro', slot:'AM', leadFile:null, leadData:null,
               priorFiles:[], origins:{},
               rosters:{ 'DC Metro':{}, 'Hampton Roads':{}, 'Richmond':{} },
               bathRoster:{},
-              result:null, manualPins:{} };
+              result:null, manualPins:{}, oppEdits:{} };
 
 // ---------------- file drops ----------------
 function wireDrop(key, handler){
@@ -2002,6 +2062,7 @@ wireDrop('leads', function(files){
   readWorkbook(f).then(function(wb){
     var d = parseLeads(wb);
     state.leadData = d;
+    state.manualPins = {}; state.oppEdits = {};   // per-lead-index state dies with the old sheet
     chip('leads', 'ok', d.rows.length + ' rows');
     nameOf('leads', f.name + (d.sheetName !== LEAD_SHEET ? ' · read sheet "' + d.sheetName + '"' : ''));
     updateRun();
@@ -2049,7 +2110,8 @@ function doRun(){
     geo: geoAll(),
     aliases: aliasAll(),
     prodMap: prodAll(),
-    manualPins: state.manualPins
+    manualPins: state.manualPins,
+    oppOverrides: state.oppEdits
   };
   var r;
   try {
@@ -2451,6 +2513,24 @@ function renderResult(r){
           $('#btnRerun').classList.add('primary');
         });
         tr.appendChild(el('td', {}, [sel]));
+        return;
+      }
+      if(c.k === 'opp'){
+        // editable — type what the job really is ("8W 2D 1 siding", "2 fed, roof"...),
+        // then Re-run: the tier recalculates from this text
+        var edited = state.oppEdits[x.i] !== undefined;
+        var inp = el('input', { type:'text', value: edited ? state.oppEdits[x.i] : (x.opp === '—' ? '' : x.opp),
+          placeholder:'—', title:'Edit the opportunity, then Re-run — the tier follows this text',
+          style:'min-height:30px;padding:3px 6px;font-size:12px;width:120px' +
+                (edited ? ';border-color:var(--accent);font-weight:700' : '') });
+        var orig = x.opp === '—' ? '' : x.opp;
+        inp.addEventListener('change', function(){
+          var v = inp.value.trim();
+          if(!v || v === orig) delete state.oppEdits[x.i];
+          else state.oppEdits[x.i] = v;
+          $('#btnRerun').classList.add('primary');
+        });
+        tr.appendChild(el('td', {}, [inp]));
         return;
       }
       var v = c.v(x);
