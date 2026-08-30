@@ -261,7 +261,9 @@ function runAll(E){
   eq('any siding → BIG', E.tierOf('SIDING', 0, false, 0, []), 'BIG');
   eq('siding inside combo → BIG', E.tierOf('COMBO_SIDING_GUTT', 0, false, 0, []), 'BIG');
   eq('3+ component combo → BIG', E.tierOf('COMBO_WIN_DOR_ROOF', 0, false, 0, []), 'BIG');
-  eq('7 windows → BIG', E.tierOf('WINDOWS', 7, true, 0, []), 'BIG');
+  eq('7 windows → MEDIUM (5+ windows rule 2026-08-30)', E.tierOf('WINDOWS', 7, true, 0, []), 'MEDIUM');
+  eq('20 windows → MEDIUM (count alone never BIG)', E.tierOf('WINDOWS', 20, true, 0, []), 'MEDIUM');
+  eq('5 windows → MEDIUM (was SMALL)', E.tierOf('WINDOWS', 5, true, 0, []), 'MEDIUM');
   eq('3 doors → BIG', E.tierOf('DOORS', 0, false, 3, ['storm']), 'BIG');
   eq('5 windows + 2 doors → BIG', E.tierOf('COMBO_WIND_DOOR', 5, true, 2, ['storm']), 'BIG');
   eq('roofing alone → MEDIUM', E.tierOf('ROOFING', 0, false, 0, []), 'MEDIUM');
@@ -270,7 +272,7 @@ function runAll(E){
   eq('2 doors → MEDIUM', E.tierOf('DOORS', 0, false, 2, ['storm']), 'MEDIUM');
   eq('1 front-entry door → MEDIUM', E.tierOf('DOORS', 0, false, 1, ['front']), 'MEDIUM');
   eq('window-combo floor → MEDIUM not SMALL', E.tierOf('COMBO_WIND_GUTTER', 1, true, 0, []), 'MEDIUM');
-  eq('5 standalone windows → SMALL', E.tierOf('WINDOWS', 5, true, 0, []), 'SMALL');
+  eq('4 standalone windows → SMALL', E.tierOf('WINDOWS', 4, true, 0, []), 'SMALL');
   eq('single storm door → SMALL', E.tierOf('DOORS', 0, false, 1, ['storm']), 'SMALL');
 
   group('Window-range tier floors (rules 2026-07-17)');
@@ -284,7 +286,7 @@ function runAll(E){
     eq('"3 to 5 windows" (worded separator) → BIG', tf('needs 3 to 5 windows').tier, 'BIG');
     eq('"three to five windows" (word numbers) → BIG', tf('three to five windows').tier, 'BIG');
     eq('bare "3-5" on a WINDOWS lead → BIG via fallback', tf('sfh, quote 3-5 of them').tier, 'BIG');
-    eq('"6-8 windows" unchanged → BIG from count (8)', tf('6-8 windows').tier, 'BIG');
+    eq('"6-8 windows" → MEDIUM from count (8; 5+ windows rule)', tf('6-8 windows').tier, 'MEDIUM');
     eq('"4-6 windows" not a special range → MEDIUM from w=6', tf('4-6 windows').tier, 'MEDIUM');
     eq('"2-3 windows" not a special range → SMALL from w=3', tf('2-3 windows').tier, 'SMALL');
     ok('floor never downgrades: "3-4 windows" + siding stays BIG',
@@ -331,7 +333,8 @@ function runAll(E){
     eq('"2D" parses d=2', E.describeOpportunity('2D').d, 2);
     eq('"6W" → MEDIUM', t('6W'), 'MEDIUM');
     eq('"3W" → SMALL', t('3W'), 'SMALL');
-    eq('"7 windows" → BIG', t('7 windows'), 'BIG');
+    eq('"7 windows" → MEDIUM (5+ windows rule)', t('7 windows'), 'MEDIUM');
+    eq('"5W" → MEDIUM', t('5W'), 'MEDIUM');
     eq('"2D" → MEDIUM', t('2D'), 'MEDIUM');
     eq('"1 fed" → MEDIUM (front-entry)', t('1 fed'), 'MEDIUM');
     eq('"1 roof" → MEDIUM', t('1 roof'), 'MEDIUM');

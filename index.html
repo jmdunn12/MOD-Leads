@@ -628,12 +628,13 @@ function tierOf(prod, w, wk, d, dtypes, prodMap){
   var wincombo = pu.indexOf('COMBO')===0 && (pu.indexOf('WIN')>=0 || inTk('W'));
   if(sid) return 'BIG';
   if(nc>=3) return 'BIG';
-  if(w>=7) return 'BIG';
   if(d>=3) return 'BIG';
   if(w>=5 && d>=2) return 'BIG';
   if(roof) return 'MEDIUM';
   if(gut && nc>=2) return 'MEDIUM';
-  if(w===6) return 'MEDIUM';
+  // Manager rule (2026-08-30): 5+ windows is MEDIUM — window count alone never
+  // makes BIG anymore (7+ used to). BIG needs siding/combos/doors alongside.
+  if(w>=5) return 'MEDIUM';
   if(d===2) return 'MEDIUM';
   if(d===1 && dtypes.indexOf('front')>=0) return 'MEDIUM';
   return wincombo ? 'MEDIUM' : 'SMALL';
@@ -666,12 +667,11 @@ function tierOfOpportunity(o){
   var tier;
   if(o.sid) tier = 'BIG';
   else if(nc >= 3) tier = 'BIG';
-  else if(o.w >= 7) tier = 'BIG';
   else if(o.d >= 3) tier = 'BIG';
   else if(o.w >= 5 && o.d >= 2) tier = 'BIG';
   else if(o.roof) tier = 'MEDIUM';
   else if(o.gut && nc >= 2) tier = 'MEDIUM';
-  else if(o.w === 6) tier = 'MEDIUM';
+  else if(o.w >= 5) tier = 'MEDIUM';   // 5+ windows = MEDIUM (2026-08-30)
   else if(o.d === 2) tier = 'MEDIUM';
   else if(o.d === 1 && o.dtypes.indexOf('front') >= 0) tier = 'MEDIUM';
   else tier = 'SMALL';

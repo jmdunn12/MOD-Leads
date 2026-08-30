@@ -166,6 +166,8 @@ Guards, so this doesn't misfire on ordinary notes:
 
 Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
 
+**5 or more windows = MEDIUM.** Window count alone never makes a lead BIG anymore (7+ used to). BIG still comes from siding, 3+ component combos, 3+ doors, or 5+ windows paired with 2+ doors — and the explicit "3-5 windows" range still floors at BIG per the range rule above.
+
 **Storm doors alone are always SMALL.** If storm doors are the only product in the notes — any count, no windows, no other door types, no siding/roof/gutter, and not a combo product code — the lead tiers SMALL regardless of how many ("3 storm doors" used to tier BIG). Anything else on the job voids this and normal rules apply.
 
 ## When something new shows up
