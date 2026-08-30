@@ -132,7 +132,7 @@ If the call center starts using a new abbreviation, tell me what it means and I'
 
 ## Editing the Opportunity by hand
 
-The **Opportunity** column on the board is an editable box. It starts with what the parser read from the lead sheet; type what the job really is — `8W 2D 1 siding`, `2 fed and a roof`, `3-5 windows` — and hit **Re-run with pins**. The tier recalculates from your text (all the usual rules apply: siding → BIG, ranges, storm-doors-only → SMALL…), and the lead competes in its new tier's pass, so the rep pick can change accordingly. Edited rows show a bold blue box and an `Opportunity edited by hand` note in the flags, which also lands in the downloaded .xlsx. Clearing the box back to the original (or empty) removes the edit; edits reset when you load a new lead sheet.
+The **Opportunity** column on the board is an editable box. It starts with what the parser read from the lead sheet; type what the job really is — `8W 2D 1 siding`, `2 fed and a roof`, `3-5 windows`. The Tier cell previews live as you type, and the moment you press Enter or click away **the board recategorizes and reassigns itself automatically** — no Re-run click needed. The tier recalculates from your text (all the usual rules apply: siding → BIG, ranges, storm-doors-only → SMALL…), and the lead competes in its new tier's pass, so the rep pick can change accordingly. Edited rows show a bold blue box and an `Opportunity edited by hand` note in the flags, which also lands in the downloaded .xlsx. Clearing the box back to the original (or empty) removes the edit; edits reset when you load a new lead sheet.
 
 ## Rep names in the notes
 
@@ -165,6 +165,8 @@ Guards, so this doesn't misfire on ordinary notes:
 | any other range (`6-8`, `2-3`, …) | no floor — tiers by the max count as before |
 
 Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
+
+**Unconfirmed leads are never issued.** A lead whose Status is `Unconfirmed` (also `Not Confirmed` / `unconf`) is skipped like an Open lead — it comes off the board entirely and shows in the skip counts as "unconfirmed".
 
 **5 or more windows = MEDIUM.** Window count alone never makes a lead BIG anymore (7+ used to). BIG still comes from siding, 3+ component combos, 3+ doors, or 5+ windows paired with 2+ doors — and the explicit "3-5 windows" range still floors at BIG per the range rule above.
 

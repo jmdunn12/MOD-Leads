@@ -331,6 +331,8 @@ var BATH_TEAM = 'Kappa';   // strictly bath crew — never on any field board
 
 var CANCEL_REP  = 'james dunn';
 var SKIP_STATUS = ['open'];
+// Manager rule (2026-08-30): an unconfirmed lead is never issued to a rep.
+var UNCONFIRMED_STATUS = ['unconfirmed', 'not confirmed', 'unconf'];
 var SKIP_CAMPAIGN = ['install consultant'];
 
 // Per-market exclusions. Old flat BOTTOM_EXCLUDE was miscategorized: raymond
@@ -830,6 +832,7 @@ function makeScorer(ctx){
 function classifySkip(lead, market){
   if(low(lead['Service Provider']) === CANCEL_REP) return 'cancelled';
   if(SKIP_STATUS.indexOf(low(lead['Status'])) >= 0) return 'open';
+  if(UNCONFIRMED_STATUS.indexOf(low(lead['Status'])) >= 0) return 'unconfirmed';
   if(SKIP_CAMPAIGN.indexOf(low(lead['Campaign'])) >= 0) return 'campaign';
   var wanted = low(market || 'dc metro');
   if(low(lead['Market']) !== wanted) return 'market';
@@ -1002,7 +1005,7 @@ function run(input){
   var marketTeams = TEAMS_BY_MARKET[market] || [];
 
   // --- skip rules (read original Service Provider first). 'bath' = route, not drop. ---
-  var skips = { market:0, cancelled:0, open:0, campaign:0, bath:0 };
+  var skips = { market:0, cancelled:0, open:0, unconfirmed:0, campaign:0, bath:0 };
   var dropped = {};
   var bathLeadIdx = [];
   leads.forEach(function(l, i){
@@ -1413,7 +1416,7 @@ function runAllMarkets(input){
   // would triple-count every lead as "other market" in the two runs it doesn't belong to)
   var marketSet = {};
   MARKETS.forEach(function(m){ marketSet[low(m)] = true; });
-  var skips = { market:0, cancelled:0, open:0, campaign:0, bath:0 };
+  var skips = { market:0, cancelled:0, open:0, unconfirmed:0, campaign:0, bath:0 };
   var dropped = {};
   (input.leads || []).forEach(function(l, i){
     var why = classifySkip(l, l['Market']);
@@ -2094,7 +2097,8 @@ wireDrop('prior', function(files){
 $('#runBtn').addEventListener('click', function(){ doRun(); });
 $('#btnRerun').addEventListener('click', function(){ doRun(); });
 
-function doRun(){
+function doRun(opts){
+  var quiet = opts && opts.quiet;   // auto re-runs (opportunity edits) don't yank the scroll
   var info = slotSaveInfo();
   state.storedSlot = info.slot;         // 'TOMORROW_AM' stores as 'AM'
   state.shiftDateKey = info.dateKey;    // …dated tomorrow
@@ -2139,7 +2143,7 @@ function doRun(){
   renderGeoForm(r.missingGeo);
   renderResult(r);
   $('#resultPanel').hidden = false;
-  $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+  if(!quiet) $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
 // ---------------- unknown cities ----------------
@@ -2418,8 +2422,9 @@ function renderResult(r){
   var marketTxt = r.isAll ? 'All markets' : r.market;
   var mktSkipTxt = r.isAll ? sk.market + ' unknown market' : sk.market + ' other market';
   s.appendChild(el('span', { class:'muted', style:'font-size:12px', text:
-    marketTxt + ' · skips: ' + sk.cancelled + ' cancelled · ' + sk.open + ' open · ' + sk.campaign +
-    ' install consultant · ' + sk.bath + ' routed to bath · ' + mktSkipTxt + ' · ' + capsTxt }));
+    marketTxt + ' · skips: ' + sk.cancelled + ' cancelled · ' + sk.open + ' open · ' + (sk.unconfirmed || 0) +
+    ' unconfirmed · ' + sk.campaign + ' install consultant · ' + sk.bath + ' routed to bath · ' +
+    mktSkipTxt + ' · ' + capsTxt }));
 
   var fb = $('#flagBox'); fb.innerHTML = '';
   function notice(cls, title, items){
@@ -2516,19 +2521,27 @@ function renderResult(r){
         return;
       }
       if(c.k === 'opp'){
-        // editable — type what the job really is ("8W 2D 1 siding", "2 fed, roof"...),
-        // then Re-run: the tier recalculates from this text
+        // editable — type what the job really is ("8W 2D 1 siding", "2 fed, roof"...).
+        // The Tier cell previews live as you type; on Enter/click-away the whole board
+        // re-runs automatically, so the lead lands in its new tier's pass.
         var edited = state.oppEdits[x.i] !== undefined;
         var inp = el('input', { type:'text', value: edited ? state.oppEdits[x.i] : (x.opp === '—' ? '' : x.opp),
-          placeholder:'—', title:'Edit the opportunity, then Re-run — the tier follows this text',
+          placeholder:'—', title:'Edit the opportunity — the tier recategorizes automatically',
           style:'min-height:30px;padding:3px 6px;font-size:12px;width:120px' +
                 (edited ? ';border-color:var(--accent);font-weight:700' : '') });
         var orig = x.opp === '—' ? '' : x.opp;
+        inp.addEventListener('input', function(){
+          var v = inp.value.trim();
+          // live preview in this row's Tier cell; engine truth follows on commit
+          var t = (v && v !== orig) ? E.tierOfOpportunity(E.describeOpportunity(v)) : x.tier;
+          if(tr.children[2]) tr.children[2].textContent = t;
+        });
         inp.addEventListener('change', function(){
           var v = inp.value.trim();
           if(!v || v === orig) delete state.oppEdits[x.i];
           else state.oppEdits[x.i] = v;
-          $('#btnRerun').classList.add('primary');
+          if(!$('#runBtn').disabled) doRun({ quiet:true });   // recategorize + reassign automatically
+          else $('#btnRerun').classList.add('primary');       // viewing a restored board with no roster checked
         });
         tr.appendChild(el('td', {}, [inp]));
         return;

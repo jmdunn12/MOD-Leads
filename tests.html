@@ -428,25 +428,37 @@ function runAll(E){
       mkLead({ 'Customer Name':'Open One', 'Status':'Open' }),
       mkLead({ 'Customer Name':'Installer', 'Campaign':'Install Consultant' }),
       mkLead({ 'Customer Name':'Bath', 'Product':'BATHSYSTEM' }),
-      mkLead({ 'Customer Name':'Baltimore Mkt', 'Market':'Baltimore' })
+      mkLead({ 'Customer Name':'Baltimore Mkt', 'Market':'Baltimore' }),
+      mkLead({ 'Customer Name':'Unconfirmed One', 'Status':'Unconfirmed' })
     ];
     var reps = [rep('titus smith','bowie'), rep('stephen bryan','laurel')];
     var r = E.run(mkInput(leads, reps));
     eq('cancelled (James Dunn) counted', r.skips.cancelled, 1);
     eq('open status counted', r.skips.open, 1);
+    eq('unconfirmed status counted (rule 2026-08-30)', r.skips.unconfirmed, 1);
+    ok('unconfirmed lead never reaches the board',
+      r.rows.concat(r.bathRows).every(function(x){ return x.lead['Customer Name'] !== 'Unconfirmed One'; }));
     eq('install consultant counted', r.skips.campaign, 1);
     eq('bath now ROUTED not dropped (bath count still exposed)', r.skips.bath, 1);
     ok('bath lead not on the field board', r.rows.every(function(x){ return String(x.lead['Product']).toUpperCase() !== 'BATHSYSTEM'; }));
     ok('bath lead present on the bath board', r.bathRows.length === 1 && String(r.bathRows[0].lead['Product']).toUpperCase() === 'BATHSYSTEM');
     eq('wrong market counted', r.skips.market, 1);
-    eq('4 rows dropped (not bath), 1 kept on field board', r.rows.length, 1);
+    eq('5 rows dropped (not bath), 1 kept on field board', r.rows.length, 1);
     eq('the kept row is the right one', r.rows[0].lead['Customer Name'], 'Keep Me');
     ok('James Dunn read BEFORE the column is blanked', r.rows[0].lead['Customer Name'] !== 'Cancelled');
-    eq('skipped count in summary (excludes bath which is routed)', r.counts.skipped, 4);
+    eq('skipped count in summary (excludes bath which is routed)', r.counts.skipped, 5);
     ok('case-insensitive: "james dunn" lowercase also skipped',
       E.classifySkip(mkLead({ 'Service Provider':'  james dunn ' }), 'DC Metro') === 'cancelled');
     ok('case-insensitive: status "OPEN" skipped',
       E.classifySkip(mkLead({ 'Status':'OPEN' }), 'DC Metro') === 'open');
+    ok('case-insensitive: status "UNCONFIRMED" skipped',
+      E.classifySkip(mkLead({ 'Status':'UNCONFIRMED' }), 'DC Metro') === 'unconfirmed');
+    ok('"Not Confirmed" wording also skipped',
+      E.classifySkip(mkLead({ 'Status':'Not Confirmed' }), 'DC Metro') === 'unconfirmed');
+    ok('"unconf" shorthand also skipped',
+      E.classifySkip(mkLead({ 'Status':'unconf' }), 'DC Metro') === 'unconfirmed');
+    ok('a Confirmed status is NOT skipped',
+      E.classifySkip(mkLead({ 'Status':'Confirmed' }), 'DC Metro') === null);
   })();
 
   // ---------- 5. note pins ----------
