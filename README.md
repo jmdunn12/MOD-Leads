@@ -120,6 +120,7 @@ These show up in the Notes field from the call center. The counting ones feed th
 | `FE`, `1-FE` | front entry door | counts as front/entry door(s), same tier rule |
 | `SD`, `2-SD` | storm door | counts as storm door(s); bare `sd` counts 1 |
 | `SGD` | sliding glass door | counts as sliding door(s); bare `sgd` counts 1 |
+| `french`, `2 french doors` | french door | counts as door(s); bare `french` counts 1 — but "french windows" stays a window |
 | `DHW`, `6 dhw` | double hung window | counts as windows ("6 dhw" = 6); needs a number |
 | `SFH` | single family home | none (property type) |
 | `HOA` | homeowners association | none |

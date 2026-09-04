@@ -504,6 +504,7 @@ function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.ch
 //   FE         = front entry door              -> front/entry door count
 //   SD         = storm door                    -> storm door count
 //   SGD        = sliding glass door            -> sliding door count
+//   french     = french door (2026-09-04)      -> door count; "french windows" excepted
 //   DHW        = double hung window            -> window count ("6 dhw" = 6)
 //   Descriptive — must stay inert:
 //   SFH        = single family home            (property type, not a product)
@@ -596,12 +597,16 @@ function parseDoors(str){
   // "SD" = storm door (call-center shorthand)
   var storm = cnt('(?:storms?(?:\\s+doors?)?\\b|sd\\b)');
   var slide = cnt('(?:sgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');
+  // "french" always means a door (manager rule 2026-09-04): "french door", bare
+  // "french", "2 french" all count — but "french windows" stays a window style.
+  var french = cnt('french(?:\\s+doors?)?\\b(?!\\s+windows?)');
   var generic = cnt('doors?\\b', 0);
   var types = [];
   if(front>0) types.push('front');
   if(storm>0) types.push('storm');
   if(slide>0) types.push('sliding');
-  var d = Math.max(generic, front+storm+slide);
+  if(french>0) types.push('french');
+  var d = Math.max(generic, front+storm+slide+french);
   return { count:d, types:types, known:(d>0 || types.length>0) };
 }
 

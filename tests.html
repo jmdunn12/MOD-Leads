@@ -207,6 +207,25 @@ function runAll(E){
     // SGD = sliding glass door (long-standing; locked in with the new batch)
     eq('bare "sgd" defaults to 1 sliding', E.parseDoors('sgd').count, 1);
     eq('"2 sgd" = 2', E.parseDoors('2 sgd').count, 2);
+    // "french" = door (rule 2026-09-04)
+    eq('"french door" = 1 door', E.parseDoors('replace french door').count, 1);
+    eq('bare "french" defaults to 1 door', E.parseDoors('wants french quoted').count, 1);
+    eq('"french" typed as french', E.parseDoors('wants french quoted').types, ['french']);
+    eq('"2 french doors" = 2', E.parseDoors('2 french doors').count, 2);
+    eq('"2-french" (dashed) = 2', E.parseDoors('2-french').count, 2);
+    eq('"1 french and 1 sgd" sums to 2', E.parseDoors('1 french and 1 sgd').count, 2);
+    eq('…types tracked', E.parseDoors('1 french and 1 sgd').types.slice().sort(), ['french','sliding']);
+    eq('"2 french windows" stays windows (0 doors)', E.parseDoors('2 french windows').count, 0);
+    eq('…and counts 2 windows', E.parseWindows('2 french windows').count, 2);
+    eq('1 french tiers SMALL (patio-style single door)',
+       E.describeLead(mkLead({ Product:'DOORS', Notes:'french door' }), null).tier, 'SMALL');
+    eq('2 french doors tier MEDIUM',
+       E.describeLead(mkLead({ Product:'DOORS', Notes:'2 french doors' }), null).tier, 'MEDIUM');
+    eq('3 french doors tier BIG',
+       E.describeLead(mkLead({ Product:'DOORS', Notes:'3 french doors' }), null).tier, 'BIG');
+    eq('french + storm is NOT storm-only (2 doors, MEDIUM)',
+       E.describeLead(mkLead({ Product:'DOORS', Notes:'1 storm and 1 french' }), null).tier, 'MEDIUM');
+    eq('opp box understands french too', E.tierOfOpportunity(E.describeOpportunity('2 french')), 'MEDIUM');
     // WIS = walk in shower — descriptive, inert
     eq('WIS is inert (windows)', E.parseWindows('wis, sfh').count, 0);
     eq('WIS is inert (doors)', E.parseDoors('wis, sfh').count, 0);
