@@ -505,7 +505,9 @@ function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.ch
 //   SD         = storm door                    -> storm door count
 //   SGD        = sliding glass door            -> sliding door count
 //   french     = french door (2026-09-04)      -> door count; "french windows" excepted
-//   DHW        = double hung window            -> window count ("6 dhw" = 6)
+//   DHW / DH   = double hung window            -> window count ("6 dhw" = 6, "15dh" = 15)
+//   Note: "PREV CUST"/"** PREV CUST 2012**" is a PREFIX banner — current-job info
+//   follows it, so it is NOT a cutoff. Only "pre-cust" cuts (history follows that).
 //   Descriptive — must stay inert:
 //   SFH        = single family home            (property type, not a product)
 //   HOA        = homeowners association        (not a product)
@@ -545,8 +547,12 @@ function parseWindows(s){
   for(i=0;i<m.length;i++) nums.push(parseInt(m[i][1],10));
   m = all(new RegExp('(?<!\\d)'+NUM+'\\s+win\\b'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
-  // "DHW" = double hung window (call-center shorthand): "6 dhw", "2-dhw"
-  m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]*dhw\\b'), s);
+  // "DHW"/"DH" = double hung window (call-center shorthand): "6 dhw", "2-dhw",
+  // and the glued "15dh" (no un-glue pass runs for windows, so allow zero separator)
+  m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]*dhw?\\b'), s);
+  for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
+  // "15 double hung" without the word "windows" still counts
+  m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]+(?:double|single)\\s+hung\\b'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   nums = nums.filter(function(x){ return x>0 && x<=40; });
   var base = nums.length ? Math.max.apply(null, nums) : 0;
@@ -1408,7 +1414,8 @@ function runAllMarkets(input){
       homes: input.homes, origins: input.origins, geo: input.geo,
       aliases: input.aliases, prodMap: input.prodMap,
       floor: input.floorBy ? input.floorBy[M] : undefined,
-      manualPins: input.manualPins
+      manualPins: input.manualPins,
+      oppOverrides: input.oppOverrides
     });
     // consume Kappa reps this market used (assigned or pinned) before the next market runs
     var used = {};
@@ -2535,11 +2542,14 @@ function renderResult(r){
           style:'min-height:30px;padding:3px 6px;font-size:12px;width:120px' +
                 (edited ? ';border-color:var(--accent);font-weight:700' : '') });
         var orig = x.opp === '—' ? '' : x.opp;
+        // locate the Tier cell by column key — its position shifts when the
+        // all-markets Market column is present (writing to a fixed index hit Market)
+        var tierIdx = cols.map(function(cc){ return cc.k; }).indexOf('tier');
         inp.addEventListener('input', function(){
           var v = inp.value.trim();
           // live preview in this row's Tier cell; engine truth follows on commit
           var t = (v && v !== orig) ? E.tierOfOpportunity(E.describeOpportunity(v)) : x.tier;
-          if(tr.children[2]) tr.children[2].textContent = t;
+          if(tierIdx >= 0 && tr.children[tierIdx]) tr.children[tierIdx].textContent = t;
         });
         inp.addEventListener('change', function(){
           var v = inp.value.trim();

@@ -192,6 +192,21 @@ function runAll(E){
     eq('"six dhw" word-number works', E.parseWindows('six dhw').count, 6);
     ok('"6 dhw" marks the count as known', E.parseWindows('6 dhw').known === true);
     eq('bare "dhw" with no number counts nothing (window convention)', E.parseWindows('replace dhw').count, 0);
+    // "DH" shorthand incl. glued — from the live note "** PREV CUST 2012**SFH, 15dh, OK w/ vinyl."
+    eq('"15dh" (glued) = 15 windows', E.parseWindows('sfh, 15dh, ok w/ vinyl.').count, 15);
+    eq('"15 dh" (spaced) = 15', E.parseWindows('15 dh').count, 15);
+    eq('"15-dh" (dashed) = 15', E.parseWindows('15-dh').count, 15);
+    eq('"six dh" word-number = 6', E.parseWindows('six dh').count, 6);
+    eq('bare "dh" with no number counts nothing', E.parseWindows('dh replacement').count, 0);
+    eq('"dh" never reads as a door', E.parseDoors('sfh, 15dh').count, 0);
+    eq('"15 double hung" without "windows" = 15', E.parseWindows('15 double hung, ok w/ vinyl').count, 15);
+    var prevCust = E.describeLead(mkLead({ Product:'WINDOWS',
+      Notes:'** PREV CUST 2012**\nSFH, 15dh, OK w/ vinyl.' }), null);
+    eq('the exact live note reads 15 windows (PREV CUST banner is not a cutoff)', prevCust.w, 15);
+    eq('…and tiers MEDIUM (5+ windows rule)', prevCust.tier, 'MEDIUM');
+    var preCut = E.describeLead(mkLead({ Product:'WINDOWS',
+      Notes:'6 windows. pre-cust: had 15dh installed in 2012' }), null);
+    eq('"pre-cust" still cuts history: 15dh after it is ignored', preCut.w, 6);
     // SD = storm door
     eq('"2 sd" = 2 storm doors', E.parseDoors('2 sd').count, 2);
     eq('"2-sd" (dashed) works', E.parseDoors('2-sd').count, 2);
@@ -1201,6 +1216,17 @@ function runAll(E){
     eq('the extra DC lead stays unfilled rather than crossing markets', byCust['DC 2'], null);
     ok('…flagged as pool exhaustion',
       r.rows.some(function(x){ return x.lead['Customer Name'] === 'DC 2' && /more leads than available reps/.test(x.flags[0]); }));
+
+    // Opportunity edits must reach the sub-runs in ALL mode (bug 2026-09-04:
+    // oppOverrides wasn't forwarded, so edits changed nothing on the combined board)
+    var rEdit = E.runAllMarkets({ slot:'AM', leads:leads,
+      rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':['ronald linn'] },
+      bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{}, oppOverrides:{ 0:'1 siding' } });
+    var dc1 = rEdit.rows.filter(function(x){ return x.lead['Customer Name'] === 'DC 1'; })[0];
+    eq('ALL mode: edited opportunity recategorizes the tier', dc1.tier, 'BIG');
+    ok('ALL mode: edit flagged on the row',
+      dc1.flags.some(function(f){ return /Opportunity edited by hand/.test(f); }), JSON.stringify(dc1.flags));
   })();
 }
 </script>

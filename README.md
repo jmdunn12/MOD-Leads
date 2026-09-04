@@ -121,7 +121,7 @@ These show up in the Notes field from the call center. The counting ones feed th
 | `SD`, `2-SD` | storm door | counts as storm door(s); bare `sd` counts 1 |
 | `SGD` | sliding glass door | counts as sliding door(s); bare `sgd` counts 1 |
 | `french`, `2 french doors` | french door | counts as door(s); bare `french` counts 1 — but "french windows" stays a window |
-| `DHW`, `6 dhw` | double hung window | counts as windows ("6 dhw" = 6); needs a number |
+| `DHW`, `DH`, `6 dhw`, `15dh` | double hung window | counts as windows ("15dh" = 15, glued or spaced); needs a number. "15 double hung" without the word "windows" counts too |
 | `SFH` | single family home | none (property type) |
 | `HOA` | homeowners association | none |
 | `SO` | single owner | none |
