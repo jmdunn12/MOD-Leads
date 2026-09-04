@@ -227,6 +227,20 @@ function runAll(E){
     // ordinals stay glued — floor numbers are not counts
     eq('"2nd floor windows" counts nothing', E.parseWindows('replace 2nd floor windows').count, 0);
     eq('"2nd door on the right" is not 2 doors', E.parseDoors('2nd door on the right').count, 0);
+
+    // a number never bridges across another product's word (rule 2026-09-04):
+    // "7 windows and FED" was pulling 7 windows AND 7 doors
+    eq('"7 windows and FED" → 7 windows', E.parseWindows('7 windows and fed').count, 7);
+    eq('"7 windows and FED" → 1 door (not 7)', E.parseDoors('7 windows and fed').count, 1);
+    eq('…door typed front/entry', E.parseDoors('7 windows and fed').types, ['front']);
+    var wf = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'7 windows and FED' }), null);
+    eq('full lead: "7 windows and FED" → 7W 1D', wf.w + 'W ' + wf.d + 'D', '7W 1D');
+    eq('…tiers MEDIUM', wf.tier, 'MEDIUM');
+    // and the mirror direction
+    eq('"3 doors and windows" is not 3 windows', E.parseWindows('3 doors and windows').count, 0);
+    eq('"3 doors and windows" doors = 3', E.parseDoors('3 doors and windows').count, 3);
+    eq('"2 fed and windows quoted" is not 2 windows', E.parseWindows('2 fed and windows quoted').count, 0);
+    eq('"2 fed and windows quoted" doors = 2', E.parseDoors('2 fed and windows quoted').count, 2);
     var prevCust = E.describeLead(mkLead({ Product:'WINDOWS',
       Notes:'** PREV CUST 2012**\nSFH, 15dh, OK w/ vinyl.' }), null);
     eq('the exact live note reads 15 windows (PREV CUST banner is not a cutoff)', prevCust.w, 15);

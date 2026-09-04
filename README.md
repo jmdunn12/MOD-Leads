@@ -129,6 +129,7 @@ These show up in the Notes field from the call center. The counting ones feed th
 | `one legger` | only one household member will be home | none |
 | `double hung` / `single hung` | window type | none by itself — "2 double hung windows" still counts 2 |
 | `4picture windows`, `8windows` | glued counts | numbers glued to the next word still count — "996 4picture windows" reads as **4** (the stray 996 is ignored). Ordinals never count: "2nd floor windows" is not 2 windows |
+| `7 windows and FED` | mixed products | each number sticks to its own product — this reads **7 windows + 1 door**, never 7 doors. Same in reverse: "3 doors and windows" is 3 doors, not 3 windows |
 
 If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
 

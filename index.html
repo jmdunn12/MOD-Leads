@@ -518,6 +518,11 @@ function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.ch
 var WORDNUM = {one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
   eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,twenty:20};
 var NUM = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty)';
+// Filler words between a number and its product keyword: no digits (times/prices must
+// not bridge) and never another product's counting word — otherwise "7 windows and FED"
+// reads the 7 onto the doors count.
+// ("french" is a door word except directly before "windows", where it's a style.)
+var FILLER = '(?:[\\s,]+(?!(?:windows?|win|dhw?|doors?|fed|fe|sd|sgd|storms?|sliding|patio|bow|bay)\\b|french\\b(?!\\s+windows?))[a-z][a-z,-]*){0,2}?';
 function nn(t){ t = String(t).trim().toLowerCase(); return /^\d+$/.test(t) ? parseInt(t,10) : (WORDNUM[t]||0); }
 function all(re, s){ var out=[], m, r=new RegExp(re.source, re.flags.indexOf('g')<0?re.flags+'g':re.flags);
   while((m=r.exec(s))!==null){ out.push(m); if(m.index===r.lastIndex) r.lastIndex++; } return out; }
@@ -541,9 +546,9 @@ function parseWindows(s){
     nums.push(lo, hi);
     if(lo > 0 && hi >= lo && hi <= 40) ranges.push([lo, hi]);
   }
-  // filler words may not contain digits — otherwise "10 am--bp--1 windows"-style
-  // blobs bridge a stray number onto the count
-  m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[a-z][a-z,-]*){0,2}?[\\s,]+windows?'), s);
+  // FILLER: no digits ("10 am--bp--1 windows" can't bridge) and no other product's
+  // counting words ("3 doors and windows" is not 3 windows)
+  m = all(new RegExp('(?<!\\d)'+NUM+FILLER+'[\\s,]+windows?'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   m = all(/(?<!\d)(\d{1,2})\s*windows?/, s);
   for(i=0;i<m.length;i++) nums.push(parseInt(m[i][1],10));
@@ -590,7 +595,7 @@ function parseDoors(str){
   function cnt(kw, dflt){
     if(dflt===undefined) dflt = 1;
     var ns=[], m, i;
-    m = all(new RegExp('(?<!\\d)'+NUM+'(?:[\\s,]+[a-z][a-z,-]*){0,2}?[\\s,]+'+kw), s);   // digit-free fillers only
+    m = all(new RegExp('(?<!\\d)'+NUM+FILLER+'[\\s,]+'+kw), s);   // no digits/product words as fillers
     for(i=0;i<m.length;i++) ns.push(nn(m[i][1]));
     m = all(new RegExp('(\\d{1,2})[\\s-]*'+kw), s);   // dash tolerated: "1-fe", "2-sd"
     for(i=0;i<m.length;i++) ns.push(parseInt(m[i][1],10));
