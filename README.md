@@ -116,7 +116,7 @@ These show up in the Notes field from the call center. The counting ones feed th
 
 | Abbreviation | Means | Effect on parsing |
 |---|---|---|
-| `ED`, `1-ED`, `2 ed` | entry door | counts as front/entry door(s) — one entry door makes the lead at least MEDIUM |
+| `ED`, `1-ED`, `2 ed` | entry door | counts as front/entry door(s) — one entry door makes the lead at least MEDIUM. A bare `ED` with no number counts as **1 door** (and never pins a rep named Ed) |
 | `FE`, `1-FE` | front entry door | counts as front/entry door(s), same tier rule |
 | `SD`, `2-SD` | storm door | counts as storm door(s); bare `sd` counts 1 |
 | `SGD` | sliding glass door | counts as sliding door(s); bare `sgd` counts 1 |

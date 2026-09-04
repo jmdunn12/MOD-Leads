@@ -173,6 +173,20 @@ function runAll(E){
     var d = E.describeLead(mkLead({ Product:'DOORS', Notes:'SFH, one legger, 1-ED' }), null);
     eq('full lead: "SFH, one legger, 1-ED" → 1 door, MEDIUM', d.d + '/' + d.tier, '1/MEDIUM');
 
+    // bare ED with no number = 1 door (rule 2026-09-04)
+    eq('bare "ED" counts as 1 door', E.parseDoors('sfh, ed, ok w/ vinyl').count, 1);
+    eq('bare "ED" is typed front/entry', E.parseDoors('sfh, ed').types, ['front']);
+    eq('bare "ED" does not shrink a numbered count', E.parseDoors('2 ed').count, 2);
+    eq('"ed" inside a word stays inert ("needed")', E.parseDoors('siding needed').count, 0);
+    eq('"ed" inside a word stays inert ("painted")', E.parseDoors('painted trim').count, 0);
+    var de = E.describeLead(mkLead({ Product:'DOORS', Notes:'SFH, ED, BP' }), null);
+    eq('full lead: "SFH, ED, BP" → 1 door, MEDIUM (front-entry)', de.d + '/' + de.tier, '1/MEDIUM');
+    // and a bare "ed" in the notes never pins a rep named Ed (it's a door, not a person)
+    var pinEd = E.findNotePinDetail('sfh, ed, ok w/ vinyl', ['ed jones'], 'Sam Customer');
+    ok('bare "ED" never pins rep Ed (stopword)', pinEd === null);
+    var pinEdFull = E.findNotePinDetail('ed jones must run this', ['ed jones'], 'Sam Customer');
+    ok('full name "Ed Jones" still pins', !!pinEdFull && pinEdFull.rep === 'ed jones');
+
     // Everything else is descriptive and must NOT produce counts
     eq('SFH is inert (windows)', E.parseWindows('sfh, bp, wants estimate').count, 0);
     eq('SFH is inert (doors)', E.parseDoors('sfh, bp, wants estimate').count, 0);

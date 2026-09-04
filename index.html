@@ -600,6 +600,8 @@ function parseDoors(str){
   // "ED" is call-center shorthand for entry door: "2 ed" and the dashed "1-ed" both count
   var m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]+ed\\b'), s), i;
   for(i=0;i<m.length;i++) front = Math.max(front, nn(m[i][1]));
+  // bare "ED" with no number = 1 door (manager rule 2026-09-04)
+  if(/\bed\b/.test(s)) front = Math.max(front, 1);
   // "SD" = storm door (call-center shorthand)
   var storm = cnt('(?:storms?(?:\\s+doors?)?\\b|sd\\b)');
   var slide = cnt('(?:sgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');
@@ -864,7 +866,8 @@ function classifySkip(lead, market){
 var NAME_STOPWORDS = ['will','mark','bill','rich','art','grant','chase','may','june','dawn','rose',
   'joy','hope','faith','summer','winter','sunny','young','major','sharp','price','king','baker',
   'porter','carter','miller','mason','glass','storm','stone','wood','french','brown','white','black',
-  'gray','grey','green','hill','long','short','bay','bow','case','frank','norm','angel','victor','christian'];
+  'gray','grey','green','hill','long','short','bay','bow','case','frank','norm','angel','victor','christian',
+  'ed'];   // bare "ED" always means an entry door (rule 2026-09-04), never a rep named Ed
 // A mention inside one of these contexts is not an instruction to assign.
 var PIN_NEGATION = /\b(?:not|no|never|don'?t|do not|avoid|except|instead of|rather than|cancel(?:l?ed)?|reassign|remove|replace|drop|unassign|wrong|other than)\b/;
 var PIN_PAST = /\b(?:ran|already|previously|prior|last (?:time|year|visit|week)|came out|was here|has been out)\b/;
