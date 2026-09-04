@@ -214,10 +214,23 @@ function runAll(E){
     eq('bare "dh" with no number counts nothing', E.parseWindows('dh replacement').count, 0);
     eq('"dh" never reads as a door', E.parseDoors('sfh, 15dh').count, 0);
     eq('"15 double hung" without "windows" = 15', E.parseWindows('15 double hung, ok w/ vinyl').count, 15);
+
+    // glued number + style word (rule 2026-09-04) — from the live note
+    // "996 4picture windows, ok w/vinyl...both present..."
+    eq('"996 4picture windows" = 4 (glued unglued; 996 is noise)',
+       E.parseWindows('996 4picture windows, ok w/vinyl...both present...').count, 4);
+    eq('"6casement windows" = 6', E.parseWindows('6casement windows').count, 6);
+    eq('"8windows" (fully glued) = 8', E.parseWindows('sfh, 8windows').count, 8);
+    var glued = E.describeLead(mkLead({ Product:'WINDOWS',
+      Notes:'996 4picture windows, ok w/vinyl...both present...' }), null);
+    eq('full lead: the glued live note reads 4 windows', glued.w, 4);
+    // ordinals stay glued — floor numbers are not counts
+    eq('"2nd floor windows" counts nothing', E.parseWindows('replace 2nd floor windows').count, 0);
+    eq('"2nd door on the right" is not 2 doors', E.parseDoors('2nd door on the right').count, 0);
     var prevCust = E.describeLead(mkLead({ Product:'WINDOWS',
       Notes:'** PREV CUST 2012**\nSFH, 15dh, OK w/ vinyl.' }), null);
     eq('the exact live note reads 15 windows (PREV CUST banner is not a cutoff)', prevCust.w, 15);
-    eq('…and tiers MEDIUM (5+ windows rule)', prevCust.tier, 'MEDIUM');
+    eq('…and tiers BIG (>8 windows rule 2026-09-04)', prevCust.tier, 'BIG');
     var preCut = E.describeLead(mkLead({ Product:'WINDOWS',
       Notes:'6 windows. pre-cust: had 15dh installed in 2012' }), null);
     eq('"pre-cust" still cuts history: 15dh after it is ignored', preCut.w, 6);
@@ -309,8 +322,10 @@ function runAll(E){
   eq('any siding → BIG', E.tierOf('SIDING', 0, false, 0, []), 'BIG');
   eq('siding inside combo → BIG', E.tierOf('COMBO_SIDING_GUTT', 0, false, 0, []), 'BIG');
   eq('3+ component combo → BIG', E.tierOf('COMBO_WIN_DOR_ROOF', 0, false, 0, []), 'BIG');
-  eq('7 windows → MEDIUM (5+ windows rule 2026-08-30)', E.tierOf('WINDOWS', 7, true, 0, []), 'MEDIUM');
-  eq('20 windows → MEDIUM (count alone never BIG)', E.tierOf('WINDOWS', 20, true, 0, []), 'MEDIUM');
+  eq('7 windows → MEDIUM (5-8 windows rule 2026-08-30)', E.tierOf('WINDOWS', 7, true, 0, []), 'MEDIUM');
+  eq('8 windows → MEDIUM (boundary: "over 8" starts at 9)', E.tierOf('WINDOWS', 8, true, 0, []), 'MEDIUM');
+  eq('9 windows → BIG (>8 windows rule 2026-09-04)', E.tierOf('WINDOWS', 9, true, 0, []), 'BIG');
+  eq('20 windows → BIG (>8 windows rule)', E.tierOf('WINDOWS', 20, true, 0, []), 'BIG');
   eq('5 windows → MEDIUM (was SMALL)', E.tierOf('WINDOWS', 5, true, 0, []), 'MEDIUM');
   eq('3 doors → BIG', E.tierOf('DOORS', 0, false, 3, ['storm']), 'BIG');
   eq('5 windows + 2 doors → BIG', E.tierOf('COMBO_WIND_DOOR', 5, true, 2, ['storm']), 'BIG');
@@ -381,7 +396,10 @@ function runAll(E){
     eq('"2D" parses d=2', E.describeOpportunity('2D').d, 2);
     eq('"6W" → MEDIUM', t('6W'), 'MEDIUM');
     eq('"3W" → SMALL', t('3W'), 'SMALL');
-    eq('"7 windows" → MEDIUM (5+ windows rule)', t('7 windows'), 'MEDIUM');
+    eq('"7 windows" → MEDIUM (5-8 windows rule)', t('7 windows'), 'MEDIUM');
+    eq('"8W" → MEDIUM (boundary)', t('8W'), 'MEDIUM');
+    eq('"9W" → BIG (>8 windows rule 2026-09-04)', t('9W'), 'BIG');
+    eq('"12 windows" → BIG', t('12 windows'), 'BIG');
     eq('"5W" → MEDIUM', t('5W'), 'MEDIUM');
     eq('"2D" → MEDIUM', t('2D'), 'MEDIUM');
     eq('"1 fed" → MEDIUM (front-entry)', t('1 fed'), 'MEDIUM');

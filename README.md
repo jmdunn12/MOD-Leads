@@ -128,6 +128,7 @@ These show up in the Notes field from the call center. The counting ones feed th
 | `WIS` | walk in shower | none — bath routing goes by the Product code, not notes |
 | `one legger` | only one household member will be home | none |
 | `double hung` / `single hung` | window type | none by itself — "2 double hung windows" still counts 2 |
+| `4picture windows`, `8windows` | glued counts | numbers glued to the next word still count — "996 4picture windows" reads as **4** (the stray 996 is ignored). Ordinals never count: "2nd floor windows" is not 2 windows |
 
 If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
 
@@ -169,7 +170,7 @@ Time-of-day ranges like "arrive 3-5pm" are recognized as times and ignored.
 
 **Unconfirmed leads are never issued.** A lead whose Status is `Unconfirmed` (also `Not Confirmed` / `unconf`) is skipped like an Open lead — it comes off the board entirely and shows in the skip counts as "unconfirmed".
 
-**5 or more windows = MEDIUM.** Window count alone never makes a lead BIG anymore (7+ used to). BIG still comes from siding, 3+ component combos, 3+ doors, or 5+ windows paired with 2+ doors — and the explicit "3-5 windows" range still floors at BIG per the range rule above.
+**5–8 windows = MEDIUM, more than 8 windows = BIG.** A count of 9+ windows makes the lead BIG on its own (rule 2026-09-04). BIG also still comes from siding, 3+ component combos, 3+ doors, or 5+ windows paired with 2+ doors — and the explicit "3-5 windows" range still floors at BIG per the range rule above.
 
 **Storm doors alone are always SMALL.** If storm doors are the only product in the notes — any count, no windows, no other door types, no siding/roof/gutter, and not a combo product code — the lead tiers SMALL regardless of how many ("3 storm doors" used to tier BIG). Anything else on the job voids this and normal rules apply.
 

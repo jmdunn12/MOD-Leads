@@ -531,7 +531,9 @@ function stripTimes(s){
 }
 
 function parseWindows(s){
-  s = stripTimes(s);
+  // strip times, then unglue "4picture"/"8windows" — but ordinals ("2nd floor")
+  // stay glued so they never read as a count
+  s = stripTimes(s).replace(/(\d)(?!(?:st|nd|rd|th)\b)([a-z])/g, '$1 $2');
   var nums=[], ranges=[], i, m;
   var rng = all(new RegExp(NUM+'\\s*(?:to|through|-|–)\\s*'+NUM+'(?!\\s*(?:pm|am)\\b)'), s);   // "3-5pm" is a time, not windows
   for(i=0;i<rng.length;i++) if(s.indexOf('window')>=0){
@@ -548,7 +550,7 @@ function parseWindows(s){
   m = all(new RegExp('(?<!\\d)'+NUM+'\\s+win\\b'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   // "DHW"/"DH" = double hung window (call-center shorthand): "6 dhw", "2-dhw",
-  // and the glued "15dh" (no un-glue pass runs for windows, so allow zero separator)
+  // and the glued "15dh" (the un-glue pass spaces it; zero separator kept anyway)
   m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]*dhw?\\b'), s);
   for(i=0;i<m.length;i++) nums.push(nn(m[i][1]));
   // "15 double hung" without the word "windows" still counts
@@ -583,7 +585,8 @@ function windowRangeFloor(ranges){
 }
 
 function parseDoors(str){
-  var s = stripTimes(str).replace(/(\d)([a-z])/g, '$1 $2');   // strip times, then unglue "2storms"
+  // strip times, then unglue "2storms" — ordinals stay glued ("2nd door" is not 2 doors)
+  var s = stripTimes(str).replace(/(\d)(?!(?:st|nd|rd|th)\b)([a-z])/g, '$1 $2');
   function cnt(kw, dflt){
     if(dflt===undefined) dflt = 1;
     var ns=[], m, i;
@@ -645,10 +648,11 @@ function tierOf(prod, w, wk, d, dtypes, prodMap){
   if(nc>=3) return 'BIG';
   if(d>=3) return 'BIG';
   if(w>=5 && d>=2) return 'BIG';
+  // Manager rule (2026-09-04): more than 8 windows is BIG on its own
+  if(w>8) return 'BIG';
   if(roof) return 'MEDIUM';
   if(gut && nc>=2) return 'MEDIUM';
-  // Manager rule (2026-08-30): 5+ windows is MEDIUM — window count alone never
-  // makes BIG anymore (7+ used to). BIG needs siding/combos/doors alongside.
+  // Manager rule (2026-08-30): 5-8 windows is MEDIUM
   if(w>=5) return 'MEDIUM';
   if(d===2) return 'MEDIUM';
   if(d===1 && dtypes.indexOf('front')>=0) return 'MEDIUM';
@@ -684,9 +688,10 @@ function tierOfOpportunity(o){
   else if(nc >= 3) tier = 'BIG';
   else if(o.d >= 3) tier = 'BIG';
   else if(o.w >= 5 && o.d >= 2) tier = 'BIG';
+  else if(o.w > 8) tier = 'BIG';   // more than 8 windows = BIG (2026-09-04)
   else if(o.roof) tier = 'MEDIUM';
   else if(o.gut && nc >= 2) tier = 'MEDIUM';
-  else if(o.w >= 5) tier = 'MEDIUM';   // 5+ windows = MEDIUM (2026-08-30)
+  else if(o.w >= 5) tier = 'MEDIUM';   // 5-8 windows = MEDIUM (2026-08-30)
   else if(o.d === 2) tier = 'MEDIUM';
   else if(o.d === 1 && o.dtypes.indexOf('front') >= 0) tier = 'MEDIUM';
   else tier = 'SMALL';
