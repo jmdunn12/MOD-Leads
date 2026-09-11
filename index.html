@@ -1586,6 +1586,19 @@ function load(){
   if(!store.manualReps) store.manualReps = {};
   if(!store.removedReps) store.removedReps = [];
   if(!store.cityFixes) store.cityFixes = {};
+  // Reps shipped in code before they appear on a power ranking (added on the
+  // manager's ask). Each seed applies ONCE per browser — removing the rep in
+  // Manage reps afterwards sticks, and an existing manual entry is never clobbered.
+  var SEED_REPS = { 'tim waters': { team: 'Kappa', home: 'annapolis|md' } };   // added 2026-09-11
+  if(!store.seededReps) store.seededReps = [];
+  var seeded = false;
+  Object.keys(SEED_REPS).forEach(function(c){
+    if(store.seededReps.indexOf(c) >= 0) return;
+    store.seededReps.push(c);
+    if(!store.manualReps[c] && store.removedReps.indexOf(c) < 0) store.manualReps[c] = SEED_REPS[c];
+    seeded = true;
+  });
+  if(seeded) save();
 }
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify(store)); }
@@ -3069,7 +3082,7 @@ $('#btnProd').addEventListener('click', function(){
 });
 
 // ---------------- settings backup ----------------
-var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps','cityFixes'];
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps','cityFixes','seededReps'];
 $('#btnExport').addEventListener('click', function(){
   var out = { version:2, exported:new Date().toISOString() };
   BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
