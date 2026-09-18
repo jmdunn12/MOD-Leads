@@ -653,6 +653,28 @@ function runAll(E){
     eq('pinned rep pulled out of the pool', row1.rep.c, 'titus smith');
   })();
 
+  group('Manual pin on BATH leads (rule 2026-09-18)');
+  (function(){
+    var leads = [
+      mkLead({ 'Customer Name':'Tub A', 'Product':'BATHSYSTEM', 'City':'Bowie' }),
+      mkLead({ 'Customer Name':'Tub B', 'Product':'BATHSYSTEM', 'City':'Bowie' })
+    ];
+    var reps = [rep('titus smith','bowie')];
+    var kappa = [rep('malcolm kerr','washington', { team:'Kappa' }), rep('bruce hoosier','upperco', { team:'Kappa' })];
+    var r = E.run(mkInput(leads, reps, { bathReps: kappa, manualPins: { 0:'bruce hoosier' } }));
+    eq('both bath leads land on the bath board', r.bathRows.length, 2);
+    var a = r.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'Tub A'; })[0];
+    eq('bath pin honored', a.rep.c, 'bruce hoosier');
+    ok('flagged as by hand', /PINNED by hand/.test(a.flags[0]), a.flags[0]);
+    var b = r.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'Tub B'; })[0];
+    eq('pinned Kappa rep out of the pool — other lead gets the other rep', b.rep.c, 'malcolm kerr');
+    // pinning a FIELD rep onto a bath lead = deliberate overflow, flagged as such
+    var r2 = E.run(mkInput(leads, reps, { bathReps: kappa, manualPins: { 0:'titus smith' } }));
+    var a2 = r2.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'Tub A'; })[0];
+    eq('field rep pinned on a bath lead is honored', a2.rep.c, 'titus smith');
+    ok('flagged as an overflow pin', a2.flags.some(function(f){ return /OVERFLOW pin/.test(f); }), JSON.stringify(a2.flags));
+  })();
+
   // ---------- 6. drive + chaining ----------
   group('Drive estimate');
   (function(){

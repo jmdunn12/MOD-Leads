@@ -66,6 +66,7 @@ Any lead with a bath component — pure `BATHSYSTEM` **or a bath combo** like `C
 1. **Kappa first** — bath leads fill from your checked Kappa reps.
 2. **Field overflow** — if there are more bath leads than Kappa can cover, the extras go to reps who ended up on the field bench, ranked by their **bath** score. Those overflow reps disappear from the field bench so nobody's double-booked.
 3. Overflow rows are highlighted yellow with an "OVERFLOW" flag — clear at a glance which reps came from field.
+4. **Bath rows have the same Pin dropdown as field rows** — Kappa crew listed first, then field reps. Pick a rep, hit Re-run, and the lead is theirs (flagged `PINNED by hand`); the rest of the bath board re-optimizes around the pin. Pinning a field rep onto a bath lead is allowed and flagged as an overflow pin.
 
 If bath volume routinely pulls reps off the field board, the summary line calls it out.
 

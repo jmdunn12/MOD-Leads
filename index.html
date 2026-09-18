@@ -2539,23 +2539,29 @@ function renderResult(r){
     });
   }
 
+  // Pin dropdown — same control on field and bath rows; `order` sets who's listed
+  // first (bath rows lead with the Kappa crew, the natural picks there)
+  function pinCell(x, order){
+    var sel = el('select');
+    sel.appendChild(el('option', { value:'', text:'—' }));
+    order.forEach(function(a){
+      var o = el('option', { value:a.c, text:a.disp });
+      if(state.manualPins[x.i] === a.c) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', function(){
+      if(sel.value) state.manualPins[x.i] = sel.value; else delete state.manualPins[x.i];
+      $('#btnRerun').classList.add('primary');
+    });
+    return el('td', {}, [sel]);
+  }
+
   var tb = $('#board tbody'); tb.innerHTML = '';
   rows.forEach(function(x){
     var tr = el('tr', { class:x.state });
     cols.forEach(function(c){
       if(c.k === 'pin'){
-        var sel = el('select');
-        sel.appendChild(el('option', { value:'', text:'—' }));
-        r.avail.forEach(function(a){
-          var o = el('option', { value:a.c, text:a.disp });
-          if(state.manualPins[x.i] === a.c) o.selected = true;
-          sel.appendChild(o);
-        });
-        sel.addEventListener('change', function(){
-          if(sel.value) state.manualPins[x.i] = sel.value; else delete state.manualPins[x.i];
-          $('#btnRerun').classList.add('primary');
-        });
-        tr.appendChild(el('td', {}, [sel]));
+        tr.appendChild(pinCell(x, r.avail));
         return;
       }
       if(c.k === 'opp'){
@@ -2620,7 +2626,7 @@ function renderResult(r){
     r.bathRows.forEach(function(x){
       var tr = el('tr', { class: x.overflow ? 'warn' : (x.state || '') });
       cols.forEach(function(c){
-        if(c.k === 'pin'){ tr.appendChild(el('td', { text:'' })); return; }
+        if(c.k === 'pin'){ tr.appendChild(pinCell(x, (r.bathAvail || []).concat(r.fieldAvail || []))); return; }
         var v = c.v(x);
         var td = el('td', { class: (c.num?'num ':'') + (c.k==='flags'?'flags':'') });
         td.textContent = v === null || v === undefined ? '' : String(v);
