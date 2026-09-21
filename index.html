@@ -1363,13 +1363,14 @@ function run(input){
   });
 
   // --- benches ---
-  var fieldUsedC = rows.filter(function(r){ return r.rep; }).map(function(r){ return r.rep.c; });
+  // A rep holding a lead ANYWHERE is off both benches — including a field rep
+  // pinned onto a bath lead, and a Kappa rep pinned onto a field lead.
+  var usedAnywhereC = rows.concat(bathRows).filter(function(r){ return r.rep; }).map(function(r){ return r.rep.c; });
   var bench = fieldAvail.filter(function(a){
-    return fieldUsedC.indexOf(a.c) < 0 && overflowUsedC.indexOf(a.c) < 0;
+    return usedAnywhereC.indexOf(a.c) < 0;
   }).map(function(a){ var g = S.get60(a.c); return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })
     .sort(function(x,y){ return y.vol - x.vol; });
-  var bathUsedC = bathRows.filter(function(r){ return r.rep && !r.overflow; }).map(function(r){ return r.rep.c; });
-  var bathBench = bathAvail.filter(function(a){ return bathUsedC.indexOf(a.c) < 0; })
+  var bathBench = bathAvail.filter(function(a){ return usedAnywhereC.indexOf(a.c) < 0; })
     .map(function(a){ var g = S.get60(a.c); return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })
     .sort(function(x,y){ return y.vol - x.vol; });
 
@@ -1430,9 +1431,11 @@ function runAllMarkets(input){
       manualPins: input.manualPins,
       oppOverrides: input.oppOverrides
     });
-    // consume Kappa reps this market used (assigned or pinned) before the next market runs
+    // consume Kappa reps this market used (assigned or pinned) before the next market
+    // runs — field rows too, in case a Kappa rep was pinned onto a field lead
     var used = {};
     sub.bathRows.forEach(function(r){ if(r.rep && !r.overflow) used[r.rep.c] = true; });
+    sub.rows.forEach(function(r){ if(r.rep) used[r.rep.c] = true; });
     bathPool = bathPool.filter(function(n){ return !used[canon(n, aliases)]; });
     subs.push({ market: M, r: sub });
   });
@@ -1471,8 +1474,9 @@ function runAllMarkets(input){
     s.r.unknownProducts.forEach(function(p){ unknownProducts[p] = true; });
   });
   // bath bench: full Kappa pool (first run saw all of it) minus everyone used anywhere
+  // (field rows included — a Kappa rep pinned onto a field lead is not benched)
   var usedBath = {};
-  bathRows.forEach(function(r){ if(r.rep && !r.overflow) usedBath[r.rep.c] = true; });
+  rows.concat(bathRows).forEach(function(r){ if(r.rep) usedBath[r.rep.c] = true; });
   var bathAvail = subs.length ? subs[0].r.bathAvail : [];
   var bathBench = bathAvail.filter(function(a){ return !usedBath[a.c]; })
     .map(function(a){ var g = input.d60[a.c]; return { disp:a.disp, c:a.c, origin:a.origin, vol: g ? g.vol : 0 }; })

@@ -673,6 +673,45 @@ function runAll(E){
     var a2 = r2.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'Tub A'; })[0];
     eq('field rep pinned on a bath lead is honored', a2.rep.c, 'titus smith');
     ok('flagged as an overflow pin', a2.flags.some(function(f){ return /OVERFLOW pin/.test(f); }), JSON.stringify(a2.flags));
+    // …and he comes OFF the field bench (rule 2026-09-21)
+    ok('field rep pinned on a bath lead is not on the field bench',
+       !r2.bench.some(function(b){ return b.c === 'titus smith'; }), JSON.stringify(r2.bench));
+  })();
+
+  group('Pinned reps come off every bench (rule 2026-09-21)');
+  (function(){
+    // Kappa rep pinned onto a FIELD lead: off the bath bench, unused field rep stays benched
+    var leads = [ mkLead({ 'Customer Name':'Field A', 'City':'Bowie' }) ];
+    var r = E.run(mkInput(leads, [rep('titus smith','bowie')], {
+      bathReps: [rep('malcolm kerr','washington', { team:'Kappa' })],
+      manualPins: { 0:'malcolm kerr' } }));
+    var a = r.rows.filter(function(x){ return x.lead['Customer Name'] === 'Field A'; })[0];
+    eq('Kappa rep pinned on a field lead is honored', a.rep.c, 'malcolm kerr');
+    ok('flagged as a pin override', a.flags.some(function(f){ return /PIN OVERRIDE/.test(f); }), JSON.stringify(a.flags));
+    ok('…and he is not on the bath bench', !r.bathBench.some(function(b){ return b.c === 'malcolm kerr'; }));
+    ok('unused field rep still benched', r.bench.some(function(b){ return b.c === 'titus smith'; }));
+
+    // ALL mode: a Kappa rep pinned onto a field lead in DC is consumed from the
+    // shared pool — a later market's bath lead can't double-book him
+    var kerr = rep('malcolm kerr','washington|dc'); kerr.rank.team = 'Kappa';
+    var rank = { 'malcolm kerr':kerr.rank }, homes = { 'malcolm kerr':kerr.home };
+    var d60 = { 'malcolm kerr':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    var leads2 = [
+      mkLead({ 'Customer Name':'DC Field', 'City':'Bowie', 'State':'MD', 'Market':'DC Metro' }),
+      mkLead({ 'Customer Name':'RVA Bath', 'Product':'BATHSYSTEM', 'City':'Henrico', 'State':'VA', 'Market':'Richmond' })
+    ];
+    leads2.forEach(function(l, i){ l._row = i + 2; });
+    var r2 = E.runAllMarkets({
+      slot:'AM', leads:leads2,
+      rosters:{ 'DC Metro':[], 'Hampton Roads':[], 'Richmond':[] },
+      bathRoster:['malcolm kerr'], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{ 0:'malcolm kerr' }
+    });
+    var dc = r2.rows.filter(function(x){ return x.lead['Customer Name'] === 'DC Field'; })[0];
+    eq('ALL: pin honored on the DC field lead', dc.rep.c, 'malcolm kerr');
+    ok('ALL: the Richmond bath lead is unfilled, not double-booked',
+       r2.bathRows.some(function(x){ return !x.rep && x.lead['Customer Name'] === 'RVA Bath'; }));
+    ok('ALL: pinned Kappa rep not on the bath bench', !r2.bathBench.some(function(b){ return b.c === 'malcolm kerr'; }));
   })();
 
   // ---------- 6. drive + chaining ----------
