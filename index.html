@@ -228,6 +228,33 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
       </div>
     </div>
 
+    <!-- late pickup: add a lead by hand -->
+    <div class="col">
+      <div class="row" style="align-items:center">
+        <button class="sm" id="mlToggle">+ Add a lead by hand (late pickup)</button>
+        <span class="muted" id="mlCount" style="font-size:12px"></span>
+      </div>
+      <div class="col" id="mlForm" hidden>
+        <div class="row">
+          <div class="col"><label class="lbl">Customer</label><input id="mlName" type="text" placeholder="First Last"></div>
+          <div class="col"><label class="lbl">City</label><input id="mlCity" type="text" placeholder="Bowie"></div>
+          <div class="col"><label class="lbl">State</label>
+            <select id="mlState"><option>MD</option><option>VA</option><option>DC</option></select></div>
+          <div class="col"><label class="lbl">Market</label>
+            <select id="mlMarket"><option>DC Metro</option><option>Hampton Roads</option><option>Richmond</option></select></div>
+        </div>
+        <div class="row">
+          <div class="col"><label class="lbl">Product</label>
+            <input id="mlProd" type="text" list="mlProdList" placeholder="WINDOWS" style="text-transform:uppercase">
+            <datalist id="mlProdList"></datalist></div>
+          <div class="col grow"><label class="lbl">Notes</label><input id="mlNotes" type="text" placeholder="e.g. 6 windows and 1 fed — parsed like sheet notes"></div>
+          <div class="col"><label class="lbl">Time (optional)</label><input id="mlTime" type="text" placeholder="5:00 PM"></div>
+          <div class="col" style="justify-content:flex-end"><button class="sm primary" id="mlAdd">Add lead</button></div>
+        </div>
+        <div id="mlList"></div>
+      </div>
+    </div>
+
     <div class="row" id="priorRow" hidden>
       <div class="col grow">
         <label class="lbl">Prior board(s) — for drive chaining <span class="muted" id="priorHint"></span></label>
@@ -2110,10 +2137,98 @@ wireDrop('leads', function(files){
     state.manualPins = {}; state.oppEdits = {};   // per-lead-index state dies with the old sheet
     chip('leads', 'ok', d.rows.length + ' rows');
     nameOf('leads', f.name + (d.sheetName !== LEAD_SHEET ? ' · read sheet "' + d.sheetName + '"' : ''));
+    renderManualLeads();   // hand-added leads die with the old sheet too
     updateRun();
   }).catch(function(err){
-    state.leadData = null; chip('leads','no','error'); nameOf('leads', err.message); updateRun();
+    state.leadData = null; chip('leads','no','error'); nameOf('leads', err.message);
+    renderManualLeads(); updateRun();
   });
+});
+
+// ---------------- late pickup: add a lead by hand ----------------
+// Builds a row shaped exactly like a parsed SAP row, so the engine treats it like
+// any other lead: notes are parsed, tier rules apply, bath products route to Kappa.
+var mlSeq = 0;
+var COMMON_PRODUCTS = ['WINDOWS','DOORS','SIDING','GUTTERS','ROOFING','BATHSYSTEM',
+  'COMBO_WIND_DOOR','COMBO_WIND_GUTTER','COMBO_SIDING_GUTT','COMBO_BATH_WIN','COMBO_WIN_DOR_ROOF'];
+function refreshProdList(){
+  var dl = $('#mlProdList'); dl.innerHTML = '';
+  var set = {};
+  COMMON_PRODUCTS.forEach(function(p){ set[p] = true; });
+  ((state.leadData && state.leadData.rows) || []).forEach(function(r){
+    var p = String(r['Product']||'').trim().toUpperCase(); if(p) set[p] = true;
+  });
+  Object.keys(set).sort().forEach(function(p){ dl.appendChild(el('option', { value:p })); });
+}
+function manualLeadRows(){ return ((state.leadData && state.leadData.rows) || []).filter(function(r){ return r._manual; }); }
+function refreshLeadChip(){
+  if(!state.leadData) return;
+  var n = state.leadData.rows.length, m = manualLeadRows().length;
+  chip('leads', 'ok', n + ' rows' + (m ? ' (+' + m + ' by hand)' : ''));
+  if(!state.leadFile) nameOf('leads', 'lead(s) added by hand — no sheet uploaded');
+}
+function renderManualLeads(){
+  var list = $('#mlList'); list.innerHTML = '';
+  var rows = manualLeadRows();
+  $('#mlCount').textContent = rows.length ? rows.length + ' added this shift' : '';
+  rows.forEach(function(r){
+    list.appendChild(el('div', { class:'kv' }, [
+      el('span', { class:'k', text: r['Customer Name'] + ' — ' + r['City'] + ', ' + r['State'] }),
+      el('span', { class:'mono', text: r['Market'] + ' · ' + r['Product'] + (r['Notes'] ? ' · ' + r['Notes'] : '') }),
+      el('button', { class:'sm danger', text:'Remove', onclick:function(){ removeManualLead(r); } })
+    ]));
+  });
+}
+// pins/opp-edits are keyed by lead index — removing a lead shifts everything after it
+function shiftLeadKeyed(obj, removedIx){
+  var out = {};
+  Object.keys(obj).forEach(function(k){
+    var i = parseInt(k, 10);
+    if(i === removedIx) return;   // state on the removed lead dies with it
+    out[i > removedIx ? i - 1 : i] = obj[k];
+  });
+  return out;
+}
+function removeManualLead(row){
+  var ix = state.leadData.rows.indexOf(row);
+  if(ix < 0) return;
+  state.leadData.rows.splice(ix, 1);
+  state.manualPins = shiftLeadKeyed(state.manualPins, ix);
+  state.oppEdits = shiftLeadKeyed(state.oppEdits, ix);
+  refreshLeadChip(); renderManualLeads(); refreshProdList();
+  updateRun();
+  if(!$('#runBtn').disabled && state.result) doRun({ quiet:true });
+}
+$('#mlToggle').addEventListener('click', function(){
+  var f = $('#mlForm'); f.hidden = !f.hidden;
+  this.textContent = (f.hidden ? '+ ' : '− ') + 'Add a lead by hand (late pickup)';
+  if(!f.hidden){
+    if(state.market !== 'ALL') $('#mlMarket').value = state.market;
+    refreshProdList();
+    $('#mlName').focus();
+  }
+});
+$('#mlAdd').addEventListener('click', function(){
+  var name = $('#mlName').value.trim(), city = $('#mlCity').value.trim();
+  if(!name){ alert('Enter the customer name.'); return; }
+  if(!city){ alert('Enter the city.'); return; }
+  var prod = $('#mlProd').value.trim().toUpperCase() || 'WINDOWS';
+  if(!state.leadData) state.leadData = { rows: [], sheetName: 'added by hand' };
+  var row = {
+    _row: state.leadData.rows.length + 2, _manual: true,
+    'Transaction ID': 'LATE-' + (++mlSeq),
+    'Customer Name': name, 'City': city, 'State': $('#mlState').value,
+    'Market': $('#mlMarket').value, 'Product': prod, 'Campaign': 'Retail',
+    'Start Time': $('#mlTime').value.trim(), 'Notes': $('#mlNotes').value.trim(),
+    'Service Provider': '', 'Set Type Description': 'Set',
+    'Start Date/Time': '', 'Created On': '', 'Status': 'Booked'
+  };
+  state.leadData.rows.push(row);
+  $('#mlName').value = ''; $('#mlCity').value = ''; $('#mlProd').value = '';
+  $('#mlNotes').value = ''; $('#mlTime').value = '';
+  refreshLeadChip(); renderManualLeads(); refreshProdList();
+  updateRun();
+  if(!$('#runBtn').disabled && state.result) doRun({ quiet:true });
 });
 wireDrop('prior', function(files){
   var list = Array.prototype.slice.call(files);
@@ -2180,6 +2295,8 @@ function doRun(opts){
   r.rows.concat(r.bathRows).forEach(function(x){
     if(x.lead && x.lead._cityOriginal)
       x.flags.push('city spelling corrected from "' + x.lead._cityOriginal + '"');
+    if(x.lead && x.lead._manual)
+      x.flags.push('ADDED BY HAND — late pickup');
   });
   state.result = r;
   renderGeoForm(r.missingGeo);
@@ -2379,6 +2496,7 @@ function viewBoard(id){
   $$('#slots button').forEach(function(x){ x.setAttribute('aria-pressed', String(x.dataset.slot === rec.slot)); });
   $('#priorRow').hidden = rec.slot === 'AM';
   buildRoster();
+  renderManualLeads();   // a restored board brings its hand-added leads back with it
   renderResult(state.result);
   $('#resultPanel').hidden = false;
   $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });

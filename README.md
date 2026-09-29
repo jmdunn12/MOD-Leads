@@ -134,6 +134,10 @@ These show up in the Notes field from the call center. The counting ones feed th
 
 If the call center starts using a new abbreviation, tell me what it means and I'll teach the parser.
 
+## Late pickup? Add a lead by hand
+
+Under the lead-sheet box there's a **+ Add a lead by hand (late pickup)** button. Fill in customer, city, market, product, and notes — the notes are parsed exactly like the sheet's notes (abbreviations, tier rules, rep-name pins all apply), and a bath product routes to the Kappa board. The moment you add it the board re-runs and the lead competes for a rep like any other; its row is flagged `ADDED BY HAND — late pickup` and it comes along in the downloaded .xlsx and saved boards. The panel lists what you've added with a **Remove** button (removing re-runs the board too). Works even with no sheet uploaded yet, and hand-added leads clear out when you load the next shift's sheet.
+
 ## Editing the Opportunity by hand
 
 The **Opportunity** column on the board is an editable box. It starts with what the parser read from the lead sheet; type what the job really is — `8W 2D 1 siding`, `2 fed and a roof`, `3-5 windows`. The Tier cell previews live as you type, and the moment you press Enter or click away **the board recategorizes and reassigns itself automatically** — no Re-run click needed. The tier recalculates from your text (all the usual rules apply: siding → BIG, ranges, storm-doors-only → SMALL…), and the lead competes in its new tier's pass, so the rep pick can change accordingly. Edited rows show a bold blue box and an `Opportunity edited by hand` note in the flags, which also lands in the downloaded .xlsx. Clearing the box back to the original (or empty) removes the edit; edits reset when you load a new lead sheet.
