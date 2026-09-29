@@ -2757,10 +2757,21 @@ function renderResult(r){
       tb.appendChild(tr);
     });
     if(r.bathBench.length){
+      // same format as the field bench: name | current origin (chained from the
+      // prior slot's board for PM/EVE) | 60-day volume
       var bb = el('tr', { class:'bench' });
       bb.appendChild(el('td', { colspan:String(cols.length),
-        text:'Bath bench: ' + r.bathBench.map(function(b){ return b.disp + (b.vol ? ' ($'+Math.round(b.vol/1000)+'K)' : ''); }).join(', ') }));
+        text:'BATH BENCH — ' + r.bathBench.length + ' Kappa rep(s), no bath lead today (by 60-day volume)',
+        style:'font-weight:700' }));
       tb.appendChild(bb);
+      r.bathBench.forEach(function(b){
+        var tr3 = el('tr', { class:'bench' });
+        tr3.appendChild(el('td', { text:b.disp }));
+        tr3.appendChild(el('td', { text:E.title((b.origin||'').split('|')[0]) }));
+        tr3.appendChild(el('td', { colspan:String(cols.length-2),
+          text: (b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '') }));
+        tb.appendChild(tr3);
+      });
     }
   }
 }
@@ -2890,6 +2901,25 @@ function buildXlsx(){
         var fill = x.overflow ? FILL.warn : (!x.rep ? FILL.bad : FILL.pin);
         for(var k = 1; k <= lastCol; k++) row.getCell(k).fill = solid(fill);
       });
+      // BATH BENCH block — same layout as the field bench (Rep | From | volume)
+      if(r.bathBench.length){
+        var bb0 = ws.rowCount + 2;
+        var bbrow = ws.getRow(bb0);
+        bbrow.getCell(custCol || 1).value = 'BATH BENCH — ' + r.bathBench.length + ' Kappa rep(s), no bath lead today (by 60-day volume)';
+        bbrow.getCell(custCol || 1).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+        bbrow.getCell(spCol).value = 'Rep';
+        bbrow.getCell(spCol).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+        bbrow.getCell(base+3).value = 'From';
+        bbrow.getCell(base+3).font = { bold:true, color:{argb:'FFFFFFFF'}, name:'Arial' };
+        [custCol || 1, spCol, base+3, base+6].forEach(function(k){ bbrow.getCell(k).fill = solid(FILL.hdr); });
+        r.bathBench.forEach(function(b, n){
+          var row2 = ws.getRow(bb0+1+n);
+          row2.getCell(spCol).value = b.disp;
+          row2.getCell(base+3).value = E.title((b.origin||'').split('|')[0]);
+          row2.getCell(base+6).value = (b.vol ? '60-day vol $' + Math.round(b.vol/1000) + 'K' : '');
+          [spCol, base+3, base+6].forEach(function(k){ row2.getCell(k).fill = solid(FILL.bench); });
+        });
+      }
     }
 
     // borders on every used cell

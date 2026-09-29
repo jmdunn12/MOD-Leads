@@ -70,6 +70,8 @@ Any lead with a bath component — pure `BATHSYSTEM` **or a bath combo** like `C
 
 If bath volume routinely pulls reps off the field board, the summary line calls it out.
 
+The **bath bench** under the bath board uses the same format as the field bench — one row per unused Kappa rep showing where they're starting from (home in the morning, their last lead's city when chaining PM/EVE from a prior board) and their 60-day volume. The downloaded .xlsx carries the same block.
+
 ---
 
 ## Deploy so you can bookmark a URL
