@@ -1621,16 +1621,22 @@ function load(){
   // manager's ask). Each seed applies ONCE per browser — removing the rep in
   // Manage reps afterwards sticks, and an existing manual entry is never clobbered.
   var SEED_REPS = {
-    'tim waters': { team: 'Kappa', home: 'annapolis|md' },          // added 2026-09-11
-    'chukwudubem okafor': { team: 'Beta', home: 'edgewood|md' },    // added 2026-10-05 — DC Metro field
-    'sugy yi': { team: 'Beta', home: 'alexandria|va' }              // added 2026-10-05 — DC Metro field
+    // rev 2 (2026-10-05): home corrected Annapolis -> Severna Park
+    'tim waters': { team: 'Kappa', home: 'severna park|md', rev: 2 },   // added 2026-09-11
+    'chukwudubem okafor': { team: 'Beta', home: 'edgewood|md' },        // added 2026-10-05 — DC Metro field
+    'sugy yi': { team: 'Beta', home: 'alexandria|va' }                  // added 2026-10-05 — DC Metro field
   };
   if(!store.seededReps) store.seededReps = [];
   var seeded = false;
   Object.keys(SEED_REPS).forEach(function(c){
-    if(store.seededReps.indexOf(c) >= 0) return;
-    store.seededReps.push(c);
-    if(!store.manualReps[c] && store.removedReps.indexOf(c) < 0) store.manualReps[c] = SEED_REPS[c];
+    var s = SEED_REPS[c], rev = s.rev || 1;
+    // each revision applies once per browser ('name' for rev 1, 'name@rev' after),
+    // so a manager-shipped correction reaches browsers that already seeded rev 1
+    var key = rev > 1 ? c + '@' + rev : c;
+    if(store.seededReps.indexOf(key) >= 0) return;
+    store.seededReps.push(key);
+    if(store.removedReps.indexOf(c) < 0 && (!store.manualReps[c] || rev > 1))
+      store.manualReps[c] = { team: s.team, home: s.home };
     seeded = true;
   });
   if(seeded) save();
