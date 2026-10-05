@@ -1620,7 +1620,11 @@ function load(){
   // Reps shipped in code before they appear on a power ranking (added on the
   // manager's ask). Each seed applies ONCE per browser — removing the rep in
   // Manage reps afterwards sticks, and an existing manual entry is never clobbered.
-  var SEED_REPS = { 'tim waters': { team: 'Kappa', home: 'annapolis|md' } };   // added 2026-09-11
+  var SEED_REPS = {
+    'tim waters': { team: 'Kappa', home: 'annapolis|md' },          // added 2026-09-11
+    'chukwudubem okafor': { team: 'Beta', home: 'edgewood|md' },    // added 2026-10-05 — DC Metro field
+    'sugy yi': { team: 'Beta', home: 'alexandria|va' }              // added 2026-10-05 — DC Metro field
+  };
   if(!store.seededReps) store.seededReps = [];
   var seeded = false;
   Object.keys(SEED_REPS).forEach(function(c){
