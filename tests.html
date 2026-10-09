@@ -228,6 +228,39 @@ function runAll(E){
     eq('"2nd floor windows" counts nothing', E.parseWindows('replace 2nd floor windows').count, 0);
     eq('"2nd door on the right" is not 2 doors', E.parseDoors('2nd door on the right').count, 0);
 
+    // SED = side entry door (rule 2026-10-09) — an entry door, so the front-entry
+    // tier rule applies, same as ED/FE
+    eq('"1 sed" = 1 door', E.parseDoors('1 sed').count, 1);
+    eq('"sed" typed as front/entry', E.parseDoors('sfh, sed').types, ['front']);
+    eq('bare "sed" defaults to 1', E.parseDoors('sfh, sed, bp').count, 1);
+    eq('"2-sed" (dashed) = 2', E.parseDoors('2-sed').count, 2);
+    eq('"1sed" (glued) = 1', E.parseDoors('sfh, 1sed').count, 1);
+    eq('"sed" never reads as storm ("sd")', E.parseDoors('1 sed').types, ['front']);
+    eq('storm + side entry sum: "1 sd and 1 sed" = 2', E.parseDoors('1 sd and 1 sed').count, 2);
+    eq('"used vinyl" stays inert', E.parseDoors('used vinyl, wants quote').count, 0);
+    eq('"knife" does not contain "fe"', E.parseDoors('leave key under knife block').count, 0);
+    var sed = E.describeLead(mkLead({ Product:'DOORS', Notes:'SFH, SED, BP' }), null);
+    eq('full lead: "SFH, SED, BP" → 1 door, MEDIUM (entry-door rule)', sed.d + '/' + sed.tier, '1/MEDIUM');
+    eq('"side entry door" spelled out = 1 front', E.parseDoors('side entry door').types, ['front']);
+    eq('"7 windows and SED" does not bridge: 7 windows', E.parseWindows('7 windows and sed').count, 7);
+    eq('"7 windows and SED" → 1 door', E.parseDoors('7 windows and sed').count, 1);
+
+    // spelled-out window counts (rule 2026-10-09)
+    eq('"thirty windows" = 30', E.parseWindows('thirty windows').count, 30);
+    eq('"dozen windows" = 12', E.parseWindows('dozen windows').count, 12);
+    eq('"a dozen windows" = 12', E.parseWindows('replace a dozen windows').count, 12);
+    eq('"two dozen windows" = 24', E.parseWindows('two dozen windows').count, 24);
+    eq('"twenty five windows" = 25', E.parseWindows('twenty five windows').count, 25);
+    eq('"twenty-five windows" (hyphen) = 25', E.parseWindows('twenty-five windows').count, 25);
+    eq('"sixteen windows" = 16', E.parseWindows('sixteen windows').count, 16);
+    eq('"seventeen windows" is 17, not 7', E.parseWindows('seventeen windows').count, 17);
+    eq('"forty windows" = 40 (at the clamp)', E.parseWindows('forty windows').count, 40);
+    eq('"often windows" counts nothing', E.parseWindows('they often get windows quoted').count, 0);
+    eq('"eighteen dhw" = 18 (word + shorthand)', E.parseWindows('eighteen dhw').count, 18);
+    var thirty = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'SFH, thirty windows, OK w/ vinyl' }), null);
+    eq('full lead: "thirty windows" → 30W, BIG (>8 rule)', thirty.w + '/' + thirty.tier, '30/BIG');
+    eq('opp box: "dozen windows" → BIG', E.tierOfOpportunity(E.describeOpportunity('dozen windows')), 'BIG');
+
     // a number never bridges across another product's word (rule 2026-09-04):
     // "7 windows and FED" was pulling 7 windows AND 7 doors
     eq('"7 windows and FED" → 7 windows', E.parseWindows('7 windows and fed').count, 7);

@@ -121,7 +121,9 @@ These show up in the Notes field from the call center. The counting ones feed th
 |---|---|---|
 | `ED`, `1-ED`, `2 ed` | entry door | counts as front/entry door(s) — one entry door makes the lead at least MEDIUM. A bare `ED` with no number counts as **1 door** (and never pins a rep named Ed) |
 | `FE`, `1-FE` | front entry door | counts as front/entry door(s), same tier rule |
+| `SED`, `side entry door` | side entry door | counts as front/entry door(s), same tier rule as ED/FE; bare `sed` counts 1 |
 | `SD`, `2-SD` | storm door | counts as storm door(s); bare `sd` counts 1 |
+| `thirty windows`, `twenty-five windows`, `a dozen windows` | spelled-out counts | word numbers count like digits — up to forty, including "two dozen" (24). "often" never reads as "ten" |
 | `SGD` | sliding glass door | counts as sliding door(s); bare `sgd` counts 1 |
 | `french`, `2 french doors` | french door | counts as door(s); bare `french` counts 1 — but "french windows" stays a window |
 | `DHW`, `DH`, `6 dhw`, `15dh` | double hung window | counts as windows ("15dh" = 15, glued or spaced); needs a number. "15 double hung" without the word "windows" counts too |

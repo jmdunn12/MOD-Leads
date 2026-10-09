@@ -529,6 +529,7 @@ function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.ch
 //   Counting abbreviations:
 //   ED / 1-ED  = entry door (dash or space)    -> front/entry door count
 //   FE         = front entry door              -> front/entry door count
+//   SED        = side entry door (2026-10-09)  -> front/entry door count
 //   SD         = storm door                    -> storm door count
 //   SGD        = sliding glass door            -> sliding door count
 //   french     = french door (2026-09-04)      -> door count; "french windows" excepted
@@ -543,14 +544,34 @@ function title(s){ return String(s||'').replace(/\S+/g, function(w){ return w.ch
 //   one legger = only one household member home (appointment note, not a count)
 //   double hung / single hung = window TYPE descriptors ("2 double hung windows" = 2)
 var WORDNUM = {one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
-  eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,twenty:20};
-var NUM = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty)';
+  eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,
+  eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,dozen:12};
+// Spelled-out counts (manager rule 2026-10-09): "thirty windows", "twenty-five
+// windows", "a dozen windows", "two dozen windows" all count. Longest forms first
+// so "seventeen" never reads as "seven"; (?<![a-z]) so "often" never contains "ten".
+var WORDNUM_RE = '(?<![a-z])(?:' +
+  '(?:twenty|thirty|forty)(?:[\\s-]+(?:one|two|three|four|five|six|seven|eight|nine))?' +
+  '|(?:one|two|three)[\\s-]+dozen|dozen' +
+  '|seventeen|thirteen|fourteen|fifteen|sixteen|eighteen|nineteen|eleven|twelve' +
+  '|seven|three|eight|four|five|nine|one|two|six|ten)';
+var NUM = '(\\d{1,2}|' + WORDNUM_RE + ')';
 // Filler words between a number and its product keyword: no digits (times/prices must
 // not bridge) and never another product's counting word — otherwise "7 windows and FED"
 // reads the 7 onto the doors count.
 // ("french" is a door word except directly before "windows", where it's a style.)
-var FILLER = '(?:[\\s,]+(?!(?:windows?|win|dhw?|doors?|fed|fe|sd|sgd|storms?|sliding|patio|bow|bay)\\b|french\\b(?!\\s+windows?))[a-z][a-z,-]*){0,2}?';
-function nn(t){ t = String(t).trim().toLowerCase(); return /^\d+$/.test(t) ? parseInt(t,10) : (WORDNUM[t]||0); }
+var FILLER = '(?:[\\s,]+(?!(?:windows?|win|dhw?|doors?|fed|fe|sed|sd|sgd|storms?|sliding|patio|bow|bay)\\b|french\\b(?!\\s+windows?))[a-z][a-z,-]*){0,2}?';
+function nn(t){
+  t = String(t).trim().toLowerCase().replace(/[\s-]+/g, ' ');
+  if(/^\d+$/.test(t)) return parseInt(t,10);
+  var parts = t.split(' ');
+  if(parts.length === 2 && parts[1] === 'dozen') return (WORDNUM[parts[0]]||0) * 12;   // "two dozen" = 24
+  var v = 0;
+  for(var i = 0; i < parts.length; i++){
+    if(!WORDNUM[parts[i]]) return 0;
+    v += WORDNUM[parts[i]];   // "twenty five" / "twenty-five" = 25
+  }
+  return v;
+}
 function all(re, s){ var out=[], m, r=new RegExp(re.source, re.flags.indexOf('g')<0?re.flags+'g':re.flags);
   while((m=r.exec(s))!==null){ out.push(m); if(m.index===r.lastIndex) r.lastIndex++; } return out; }
 
@@ -630,16 +651,19 @@ function parseDoors(str){
     if(ns.length) return Math.max.apply(null, ns);
     return new RegExp(kw).test(s) ? dflt : 0;
   }
-  // "FE" = front entry door (call-center shorthand), alongside fed / spelled-out forms
-  var front = cnt('(?:fed\\b|fe\\b|front\\s+entry\\s+doors?|front\\s+doors?|entry\\s+doors?)');
+  // "FE" = front entry door, "SED" = side entry door (rule 2026-10-09) — both are
+  // entry doors, so both count toward the front/entry type
+  // short tokens need a LEADING \b too — bare-keyword checks run without context,
+  // so "used" must not contain "sed" and "knife" must not contain "fe"
+  var front = cnt('(?:\\bfed\\b|\\bfe\\b|\\bsed\\b|front\\s+entry\\s+doors?|front\\s+doors?|entry\\s+doors?|side\\s+entry\\s+doors?)');
   // "ED" is call-center shorthand for entry door: "2 ed" and the dashed "1-ed" both count
   var m = all(new RegExp('(?<!\\d)'+NUM+'[\\s-]+ed\\b'), s), i;
   for(i=0;i<m.length;i++) front = Math.max(front, nn(m[i][1]));
   // bare "ED" with no number = 1 door (manager rule 2026-09-04)
   if(/\bed\b/.test(s)) front = Math.max(front, 1);
   // "SD" = storm door (call-center shorthand)
-  var storm = cnt('(?:storms?(?:\\s+doors?)?\\b|sd\\b)');
-  var slide = cnt('(?:sgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');
+  var storm = cnt('(?:storms?(?:\\s+doors?)?\\b|\\bsd\\b)');
+  var slide = cnt('(?:\\bsgd\\b|sliding\\s+glass\\s+doors?|sliding\\s+patio\\s+doors?|patio\\s+doors?|sliding\\s+doors?)');
   // "french" always means a door (manager rule 2026-09-04): "french door", bare
   // "french", "2 french" all count — but "french windows" stays a window style.
   var french = cnt('french(?:\\s+doors?)?\\b(?!\\s+windows?)');
