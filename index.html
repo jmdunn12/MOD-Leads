@@ -1669,6 +1669,17 @@ function load(){
       store.manualReps[c] = { team: s.team, home: s.home };
     seeded = true;
   });
+  // Departed reps shipped in code (manager's ask): hidden from every roster, once
+  // per browser — restoring them in Manage reps afterwards sticks.
+  var SEED_REMOVALS = ['adam diaz', 'neil waranch', 'david nettle'];   // removed 2026-10-30
+  SEED_REMOVALS.forEach(function(c){
+    var key = 'removed:' + c;
+    if(store.seededReps.indexOf(key) >= 0) return;
+    store.seededReps.push(key);
+    if(store.removedReps.indexOf(c) < 0) store.removedReps.push(c);
+    delete store.manualReps[c];   // in case they were also a hand-added entry
+    seeded = true;
+  });
   if(seeded) save();
 }
 function save(){
