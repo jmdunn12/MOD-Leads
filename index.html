@@ -392,7 +392,8 @@ var DEFAULT_HOME_OVERRIDES = {
   'jacob szczepanik':   'crofton|md',
   'samantha ludwig':    'virginia beach|va',
   'steven forss':       'virginia beach|va',
-  'christopher mercer': 'richmond|va'
+  'christopher mercer': 'richmond|va',
+  'jeremy dortch':      'greenbelt|md'   // corrected 2026-11-05 (manager's ask)
 };
 
 // Geocodes are keyed 'city|state'. State-alone city lookup falls back to any state
@@ -1678,6 +1679,21 @@ function load(){
     store.seededReps.push(key);
     if(store.removedReps.indexOf(c) < 0) store.removedReps.push(c);
     delete store.manualReps[c];   // in case they were also a hand-added entry
+    seeded = true;
+  });
+  // Home corrections shipped in code for reps already on the phone list. Browsers
+  // that seeded the default overrides earlier keep their copy, so each correction
+  // is pushed ONCE per browser — editing it in Home overrides afterwards sticks.
+  var SEED_HOME_OVERRIDES = {
+    'jeremy dortch': 'greenbelt|md'   // corrected 2026-11-05
+  };
+  Object.keys(SEED_HOME_OVERRIDES).forEach(function(c){
+    var key = 'home:' + c;
+    if(store.seededReps.indexOf(key) >= 0) return;
+    store.seededReps.push(key);
+    store.homeOverrides[c] = SEED_HOME_OVERRIDES[c];
+    // a hand-added entry's home wins over overrides, so correct it too
+    if(store.manualReps[c]) store.manualReps[c].home = SEED_HOME_OVERRIDES[c];
     seeded = true;
   });
   if(seeded) save();
