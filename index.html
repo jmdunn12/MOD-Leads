@@ -80,12 +80,15 @@ label.lbl{font-size:12.5px;color:var(--ink);font-weight:700;text-transform:upper
 .chip.no{border-color:var(--bad-line);background:var(--bad)}
 .chip.warn{border-color:var(--warn-line);background:var(--warn)}
 
-.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px}
+.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:2px}
 .reps label{display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:4px;cursor:pointer;min-height:38px}
 .reps label:hover{background:var(--bench)}
 .reps input{width:17px;height:17px;flex:none;accent-color:var(--accent)}
 .reps .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .reps .hm{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
+.reps .trainSel{flex:none;margin-left:auto;max-width:112px;font-size:10px;padding:2px 3px;
+  border:1px dashed var(--line);border-radius:4px;background:var(--bench);color:var(--ink);cursor:pointer}
+.reps label:has(.trainSel) .hm{margin-left:0;overflow:hidden;text-overflow:ellipsis}
 
 .tablewrap{overflow:auto;max-height:70vh;border-top:1px solid var(--line)}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
@@ -179,6 +182,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
       <button class="sm" id="btnGeo">City coordinates (<span id="geoCount">0</span>)</button>
       <button class="sm" id="btnCityFix">City spelling fixes (<span id="cityFixCount">0</span>)</button>
       <button class="sm" id="btnHomeOv">Home overrides (<span id="hoCount">0</span>)</button>
+      <button class="sm" id="btnTraining">Training edits (<span id="trainCount">0</span>)</button>
       <button class="sm" id="btnAlias">Name aliases (<span id="aliasCount">0</span>)</button>
       <button class="sm" id="btnProd">Product mappings (<span id="prodCount">0</span>)</button>
       <button class="sm" id="btnReps">Manage reps (<span id="repsCount">0</span>)</button>
@@ -385,7 +389,8 @@ var DEFAULT_ALIASES = {
   'steve forss':'steven forss','jaems archy':'james archy',
   'zach diffenderfer':'zachary diffenderfer','zach diff':'zachary diffenderfer',
   'hunter w':'hunter willson','jacob s':'jacob szczepanik',
-  'stepehn bryan':'stephen bryan','titus smtih':'titus smith'
+  'stepehn bryan':'stephen bryan','titus smtih':'titus smith',
+  'bradley griffin':'bradley griffen'
 };
 
 var DEFAULT_HOME_OVERRIDES = {
@@ -394,6 +399,38 @@ var DEFAULT_HOME_OVERRIDES = {
   'steven forss':       'virginia beach|va',
   'christopher mercer': 'richmond|va',
   'jeremy dortch':      'greenbelt|md'   // corrected 2026-11-05 (manager's ask)
+};
+
+// Component training per rep (manager's sheet, 2026-11-05). Specs read exactly as
+// written on the sheet: W=Windows D=Doors G=Gutters S=Siding R=Roofing, BATH=bath
+// systems, ALL=every field component (bath still needs an explicit '& BATH').
+// Applied at run time, so updating this list reaches every browser; a per-rep entry
+// in store.training overrides it. A rep on NEITHER list is unconstrained.
+var DEFAULT_TRAINING = {
+  // Beta
+  'ajet doroci':'ALL',                'anwar thomas':'W/D/G',
+  'benjamin sands':'ALL',             'bradley griffen':'W/D/G',
+  'brian mullarkey':'ALL',            'dorothy cosby':'W/D/G/R & BATH',
+  'gyasi lester':'ALL & BATH',        'james archy':'W/D/G/S & BATH',
+  'jonathan lakomyj':'W/D/G/S & BATH','julius melton':'W/D/G & BATH',
+  'mary-beth heller':'W/D/G/R & BATH','michelle wagner':'W/D/G & BATH',
+  'raymond wander':'W/D/G/R & BATH',  'will perna':'ALL & BATH',
+  'zachary diffenderfer':'W/D/G & BATH',
+  // Delta
+  'anwar golladay':'ALL & BATH',      'chukwudubem okafor':'W/D/G',
+  'dustin jones':'ALL & BATH',        'franklin hill':'ALL & BATH',
+  'hunter willson':'W/D/G/S',         'jacob szczepanik':'W/D/G',
+  'jeffrey kaelin':'ALL',             'john-paul feeney':'W/D/G & BATH',
+  'joshua brown':'W/D/G',             'marc rose':'W/D/G',
+  'sugy yi':'W/D/G',                  'titus smith':'W/D/G & BATH',
+  'wojciech kowalski':'ALL',
+  // Gamma-RVA
+  'christopher mercer':'ALL',         'paul woosley':'ALL & BATH',
+  'ronald linn':'W/D/G & BATH',
+  // Gamma-VAB
+  'daniel lambert':'W/D/G',           'erin eissens':'ALL',
+  'maury cooke':'W/D/G/R',            'samantha ludwig':'ALL',
+  'steven forss':'ALL'
 };
 
 // Geocodes are keyed 'city|state'. State-alone city lookup falls back to any state
@@ -519,6 +556,32 @@ var PRODC = {
   'COMBO_GUT_ROOFING':['Gutters','Roofing'],'COMBO_SID_ROOFING':['Siding','Roofing']
 };
 var PRODUCTS = ['Windows','Doors','Siding','Gutters','Roofing','Bath'];
+
+// ---------------- training (manager rule, 2026-11-05) ----------------
+// A rep may only be assigned a lead whose EVERY component they are trained on.
+// parseTraining turns a sheet spec ('ALL', 'W/D/G/S & BATH', ...) into a set of
+// component names; null means no constraint (rep not on the sheet, blank, or the
+// explicit 'ANY'). missingTraining lists the components of a lead the rep lacks.
+var TRAIN_LETTER = { W:'Windows', D:'Doors', G:'Gutters', S:'Siding', R:'Roofing' };
+function parseTraining(spec){
+  if(spec == null) return null;
+  var s = String(spec).trim().toUpperCase();
+  if(!s) return null;
+  var t = {};
+  if(/\bBATH\b/.test(s)) t['Bath'] = true;
+  if(/\bALL\b/.test(s)){
+    PRODUCTS.forEach(function(p){ if(p !== 'Bath') t[p] = true; });
+  } else {
+    s.replace(/\bBATH\b/g, ' ').split(/[^A-Z]+/).forEach(function(tok){
+      if(TRAIN_LETTER[tok]) t[TRAIN_LETTER[tok]] = true;
+    });
+  }
+  return Object.keys(t).length ? t : null;   // nothing recognized -> no constraint
+}
+function missingTraining(t, comps){
+  if(!t) return [];
+  return (comps || []).filter(function(p){ return !t[p]; });
+}
 
 // ---------------- helpers ----------------
 function low(v){ return String(v == null ? '' : v).trim().toLowerCase(); }
@@ -1067,6 +1130,7 @@ function describeLead(lead, prodMap){
 //   slot, leads:[rowObj],
 //   fieldRoster:[canon], bathRoster:[canon],             (or legacy: `roster` == fieldRoster)
 //   rank, d60, global60, homes, origins, geo, aliases, prodMap,
+//   training:{canon:'W/D/G & BATH'|'ALL'|...},           (certifications; absent rep = no limit)
 //   floor, bottomExclude,                                (per-market; fall back to defaults)
 //   manualPins:{leadIndex:canon}
 // }
@@ -1075,6 +1139,12 @@ function run(input){
   var geo = input.geo || DEFAULT_GEO;
   var aliases = input.aliases || DEFAULT_ALIASES;
   var prodMap = input.prodMap || {};
+  // training: parse each rep's spec once; reps without an entry are unconstrained
+  var TRN = {};
+  Object.keys(input.training || {}).forEach(function(k){
+    TRN[canon(k, aliases)] = parseTraining(input.training[k]);
+  });
+  function trainMiss(c, comps){ return missingTraining(TRN[c], comps); }
   var leads = input.leads;
   var floor = (input.floor != null) ? input.floor : (DEFAULT_FLOOR[market] || 5000);
   var bottomExclude = input.bottomExclude || DEFAULT_BOTTOM_EXCLUDE[market] || [];
@@ -1220,6 +1290,8 @@ function run(input){
       live.forEach(function(rep, b){
         var dm = driveTo(rep.origin, L[i].city, L[i].stateAbbr);
         DR[a][b] = dm;
+        // Manager rule (2026-11-05): a rep must be trained on every component of the lead.
+        if(trainMiss(rep.c, L[i].comps).length){ M[a][b] = -1e9; return; }
         // Manager rule (2026-07-17): drive time never blocks an assignment.
         // It stays a scoring penalty (closer reps preferred); unknown drive = no penalty, flagged.
         var bv = S.baseVal(rep.c, L[i].comps);
@@ -1241,10 +1313,11 @@ function run(input){
   });
   // `live` is now the field bench (unassigned field reps), available for bath overflow.
 
-  // Drive no longer limits feasibility — only the BIG floor can.
+  // Drive no longer limits feasibility — only training and the BIG floor can.
   function feasibleField(i, applyFloor){
     var d = L[i];
     return fieldAvail.filter(function(a){
+      if(trainMiss(a.c, d.comps).length) return false;
       if(applyFloor && S.baseVal(a.c, d.comps) < floor) return false;
       return true;
     }).map(function(a){ return a.disp; });
@@ -1269,6 +1342,9 @@ function run(input){
       M[a] = []; DR[a] = [];
       poolArr.forEach(function(rep, b){
         var d = L[i];
+        // training gate (2026-11-05): overflow field reps need '& BATH' (and the
+        // lead's other components on a combo); Kappa reps have no entry = no limit
+        if(trainMiss(rep.c, d.comps).length){ M[a][b] = -1e9; DR[a][b] = null; return; }
         var s = bathScore(rep, d);
         DR[a][b] = s.dm;
         // drive never blocks — penalty only, unknown drive = no penalty
@@ -1295,7 +1371,8 @@ function run(input){
   bathOpenIdx.forEach(function(i){ if(!bathRes[i]) bathRes[i] = null; });
 
   function feasibleBath(i){
-    return bathAvail.map(function(a){ return a.disp; });
+    return bathAvail.filter(function(a){ return !trainMiss(a.c, L[i].comps).length; })
+      .map(function(a){ return a.disp; });
   }
 
   // ================== duplicates ==================
@@ -1334,8 +1411,10 @@ function run(input){
       row.state = (r.drive === null || r.drive > 75 || fr.thin) ? 'warn' : (d.tier === 'BIG' ? 'big' : '');
     } else {
       // Drive never blocks anymore — a lead goes unfilled only when the rep pool
-      // runs out, or (BIG tier) everyone is under the floor.
-      if(d.tier === 'BIG' && !feasibleField(i, true).length && fieldAvail.length)
+      // runs out, (BIG tier) everyone is under the floor, or nobody is trained for it.
+      if(fieldAvail.length && !feasibleField(i, false).length)
+        row.flags = ['UNFILLED — nobody on this roster is trained for ' + d.comps.join('/')];
+      else if(d.tier === 'BIG' && !feasibleField(i, true).length && fieldAvail.length)
         row.flags = ['UNFILLED — all reps below $' + floor.toLocaleString('en-US') + ' BIG floor'];
       else
         row.flags = ['UNCOVERED — more leads than available reps (all taken)'];
@@ -1366,6 +1445,9 @@ function run(input){
       row.flags = ['PINNED — "' + pins[i].token + '" appears in the notes -> ' + title(c)];
     if(!d.isBathLead && isBathRep) row.flags.push('PIN OVERRIDE: Kappa (bath) rep pinned on field lead');
     if(d.isBathLead && !isBathRep) row.flags.push('OVERFLOW pin: field rep on bath lead');
+    var tmiss = rep ? trainMiss(c, d.comps) : [];
+    if(tmiss.length) row.flags.push('PIN OVERRIDE: not trained for ' + tmiss.join('/') +
+      ' (trained: ' + String((input.training || {})[c] || '?') + ')');
     if(dm !== null && dm > 75) row.flags.push('verify drive ~' + Math.round(dm) + 'm');
     if(d.oppEdited) row.flags.push('Opportunity edited by hand ("' + d.oppEdited + '") — tier recalculated');
     if(d.resched) row.flags.push('notes mention a reschedule — check');
@@ -1388,7 +1470,10 @@ function run(input){
       if(r.overflow) row.flags.unshift('OVERFLOW from field bench (scored on Bath)');
       row.state = r.overflow ? 'warn' : ((r.drive === null || r.drive > 75) ? 'warn' : '');
     } else {
-      row.flags = ['UNCOVERED — no bath rep free and no field bench left'];
+      if(live.length && !live.some(function(x){ return !trainMiss(x.c, d.comps).length; }))
+        row.flags = ['UNCOVERED — no bath rep free and nobody left on the field bench is bath-trained'];
+      else
+        row.flags = ['UNCOVERED — no bath rep free and no field bench left'];
       row.state = 'bad';
     }
     if(d.oppEdited) row.flags.push('Opportunity edited by hand ("' + d.oppEdited + '") — tier recalculated');
@@ -1478,7 +1563,7 @@ function runAllMarkets(input){
       bathRoster: bathPool,
       rank: input.rank, d60: input.d60, global60: input.global60,
       homes: input.homes, origins: input.origins, geo: input.geo,
-      aliases: input.aliases, prodMap: input.prodMap,
+      aliases: input.aliases, prodMap: input.prodMap, training: input.training,
       floor: input.floorBy ? input.floorBy[M] : undefined,
       manualPins: input.manualPins,
       oppOverrides: input.oppOverrides
@@ -1562,6 +1647,7 @@ global.ENGINE = {
   MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM,
   DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
   DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
+  DEFAULT_TRAINING: DEFAULT_TRAINING, parseTraining: parseTraining, missingTraining: missingTraining,
   CITY_ALIASES: CITY_ALIASES, BOTTOM_EXCLUDE: BOTTOM_EXCLUDE,
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
   parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber, stripTimes: stripTimes,
@@ -1611,7 +1697,8 @@ var store = {
   bottomExclude: {},        // per-market extra exclusions on top of defaults? (kept for future UI)
   manualReps: {},           // reps added by hand before they're on the ranking: { canon: {team, home} }
   removedReps: [],          // reps hidden from every roster (departed / on leave)
-  cityFixes: {}             // misspelling -> real city: { 'balitmore|md': 'baltimore|md' }
+  cityFixes: {},            // misspelling -> real city: { 'balitmore|md': 'baltimore|md' }
+  training: {}              // per-rep overrides of DEFAULT_TRAINING: { canon: 'W/D/G & BATH' | 'ANY' | ... }
 };
 function load(){
   try {
@@ -1642,6 +1729,7 @@ function load(){
   if(!store.manualReps) store.manualReps = {};
   if(!store.removedReps) store.removedReps = [];
   if(!store.cityFixes) store.cityFixes = {};
+  if(!store.training) store.training = {};
   // Reps shipped in code before they appear on a power ranking (added on the
   // manager's ask). Each seed applies ONCE per browser — removing the rep in
   // Manage reps afterwards sticks, and an existing manual entry is never clobbered.
@@ -1943,6 +2031,7 @@ function refreshRefs(){
   $('#repsCount').textContent = Object.keys(store.manualReps).length + store.removedReps.length;
   $('#cityFixCount').textContent = Object.keys(store.cityFixes).length;
   $('#hoCount').textContent = Object.keys(store.homeOverrides).length;
+  $('#trainCount').textContent = Object.keys(store.training).length;
   $('#aliasCount').textContent = Object.keys(store.aliases).length;
   $('#prodCount').textContent = Object.keys(store.prodMap).length;
   updateRun();
@@ -1955,6 +2044,17 @@ function homesAll(){
   Object.keys(store.homeOverrides).forEach(function(k){ h[E.canon(k, ali)] = String(store.homeOverrides[k]).trim().toLowerCase(); });
   Object.keys(store.manualReps).forEach(function(k){ h[E.canon(k, ali)] = String(store.manualReps[k].home || '').trim().toLowerCase(); });
   return h;
+}
+// Effective training per rep: code-shipped sheet, then the manager's own edits on
+// top. 'ANY' (or any unparseable spec) means explicitly unconstrained.
+function trainingAll(){
+  var t = Object.assign({}, E.DEFAULT_TRAINING);
+  var ali = aliasAll();
+  Object.keys(store.training).forEach(function(k){
+    var v = String(store.training[k] || '').trim();
+    if(v) t[E.canon(k, ali)] = v; else delete t[E.canon(k, ali)];
+  });
+  return t;
 }
 // Rank data + hand-added reps. A manual rep gets a zero-stat record (team included)
 // so the engine scores them off their 60-day row or the team prior — same path as
@@ -2032,17 +2132,39 @@ function bathReps(){
     return rank[c].team === E.BATH_TEAM && homes[c] && !isRemoved(c);
   }).sort();
 }
-function repRow(c, homes, checkedMap, onChange, extraHint){
+// The dashed chip on each field row is the rep's component training (manager rule,
+// 2026-11-05): W/D/G/S/R letters, BATH, ALL = all field products, "no limit" = ANY.
+var TRAIN_CHOICES = ['ANY','ALL','ALL & BATH','W/D/G','W/D/G & BATH',
+                     'W/D/G/R','W/D/G/R & BATH','W/D/G/S','W/D/G/S & BATH'];
+function trainingChip(c){
+  var cur = trainingAll()[c] || 'ANY';
+  var sel = el('select', { class:'trainSel', title:'Trained components — assignments only send this rep leads they can run' });
+  var opts = TRAIN_CHOICES.slice();
+  if(opts.indexOf(cur.toUpperCase()) < 0) opts.push(cur);
+  opts.forEach(function(o){
+    sel.appendChild(el('option', { value:o, text: o === 'ANY' ? 'no limit' : o }));
+  });
+  sel.value = opts.indexOf(cur.toUpperCase()) >= 0 ? cur.toUpperCase() : cur;
+  sel.addEventListener('click', function(ev){ ev.stopPropagation(); });
+  sel.addEventListener('change', function(){
+    store.training[c] = sel.value;
+    save(); updateRun();
+  });
+  return sel;
+}
+function repRow(c, homes, checkedMap, onChange, extraHint, withTraining){
   var id = 'rep-' + c.replace(/[^a-z]/g,'') + '-' + Math.random().toString(36).slice(2,7);
   var cb = el('input', { type:'checkbox', id:id });
   cb.checked = !!checkedMap[c];
   cb.addEventListener('change', function(){ checkedMap[c] = cb.checked; onChange(); });
   var hint = extraHint || E.title(homes[c] ? homes[c].split('|')[0] : '?');
-  return el('label', { for:id }, [
+  var kids = [
     cb,
     el('span', { class:'nm', text: E.title(c) }),
     el('span', { class:'hm', text: hint })
-  ]);
+  ];
+  if(withTraining) kids.push(trainingChip(c));
+  return el('label', { for:id }, kids);
 }
 function buildRoster(){
   var field = $('#reps'), bath = $('#bathReps');
@@ -2070,7 +2192,7 @@ function buildRoster(){
       return;
     }
     if(!state.rosters[M]) state.rosters[M] = {};
-    names.forEach(function(c){ field.appendChild(repRow(c, homes, state.rosters[M], updateRun)); });
+    names.forEach(function(c){ field.appendChild(repRow(c, homes, state.rosters[M], updateRun, null, true)); });
   });
   var bathNames = bathReps();
   if(!bathNames.length){
@@ -2338,6 +2460,7 @@ function doRun(opts){
     geo: geoAll(),
     aliases: aliasAll(),
     prodMap: prodAll(),
+    training: trainingAll(),
     manualPins: state.manualPins,
     oppOverrides: state.oppEdits
   };
@@ -3159,6 +3282,14 @@ $('#btnHomeOv').addEventListener('click', function(){
     }
   });
 });
+$('#btnTraining').addEventListener('click', function(){
+  keyValEditor('Training edits', store.training, {
+    help:'Your changes on top of the built-in training sheet. Letters: W windows, D doors, G gutters, S siding, R roofing; add "& BATH" for bath systems; ALL = every field product; ANY = no limit. The dashed chip on each roster row edits the same thing.',
+    kph:'rep name (e.g. marc rose)', vph:'e.g. W/D/G & BATH, ALL, ANY',
+    fmt:function(v){ return String(v); },
+    parse:function(s){ return s.trim() ? s.trim().toUpperCase() : null; }
+  });
+});
 $('#btnAlias').addEventListener('click', function(){
   keyValEditor('Name aliases you’ve added', store.aliases, {
     help:'Maps a loose spelling to the canonical name. ~25 are built in; these are your extras. Used for prior boards and note-pins.',
@@ -3307,7 +3438,7 @@ $('#btnProd').addEventListener('click', function(){
 });
 
 // ---------------- settings backup ----------------
-var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps','cityFixes','seededReps'];
+var BACKUP_FIELDS = ['geo','aliases','homeOverrides','prodMap','presets','floor','bottomExclude','manualReps','removedReps','cityFixes','seededReps','training'];
 $('#btnExport').addEventListener('click', function(){
   var out = { version:2, exported:new Date().toISOString() };
   BACKUP_FIELDS.forEach(function(k){ out[k] = store[k]; });
@@ -3340,7 +3471,7 @@ $('#btnWipe').addEventListener('click', function(){
   localStorage.removeItem(KEY);
   localStorage.removeItem(OLD_KEY);
   localStorage.removeItem(BOARDS_KEY);
-  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{}, manualReps:{}, removedReps:[], cityFixes:{} };
+  store = { refs:null, geo:{}, aliases:{}, homeOverrides:{}, prodMap:{}, presets:{}, ceil:{}, floor:{}, bottomExclude:{}, manualReps:{}, removedReps:[], cityFixes:{}, training:{} };
   load(); refreshRefs(); refreshPresets(); buildRoster();
   renderBoardsList(); refreshSavedPriorSel();
 });

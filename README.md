@@ -64,11 +64,28 @@ When you pick a market:
 Any lead with a bath component — pure `BATHSYSTEM` **or a bath combo** like `COMBO_BATH_WIN_DOR` — comes off the field board automatically and lands on a separate **Bath Board** section:
 
 1. **Kappa first** — bath leads fill from your checked Kappa reps.
-2. **Field overflow** — if there are more bath leads than Kappa can cover, the extras go to reps who ended up on the field bench, ranked by their **bath** score. Those overflow reps disappear from the field bench so nobody's double-booked.
+2. **Field overflow** — if there are more bath leads than Kappa can cover, the extras go to reps who ended up on the field bench, ranked by their **bath** score. Only bench reps whose training includes **BATH** qualify (see *Component training* below). Those overflow reps disappear from the field bench so nobody's double-booked.
 3. Overflow rows are highlighted yellow with an "OVERFLOW" flag — clear at a glance which reps came from field.
 4. **Bath rows have the same Pin dropdown as field rows** — Kappa crew listed first, then field reps. Pick a rep, hit Re-run, and the lead is theirs (flagged `PINNED by hand`); the rest of the bath board re-optimizes around the pin. Pinning a field rep onto a bath lead is allowed and flagged as an overflow pin — and that rep comes **off the field bench**, same as any assignment. (The reverse holds too: a Kappa rep pinned onto a field lead leaves the bath bench and the shared Kappa pool.)
 
 If bath volume routinely pulls reps off the field board, the summary line calls it out.
+
+### Component training (who can run what)
+
+Every assignment checks the rep's **training** against the lead's components — a rep is only put on a lead they're certified to run, and a combo lead needs **every** component covered (added 2026-11-05):
+
+| Spec | Means |
+|---|---|
+| `W` / `D` / `G` / `S` / `R` | windows / doors / gutters / siding / roofing |
+| `& BATH` | may also run bath leads (incl. bath overflow from the bench) |
+| `ALL` | every field product — bath still needs an explicit `& BATH` |
+| `ANY` (or no entry) | no limit — assigned like before this rule existed |
+
+- The manager's training sheet ships **inside the app**, so it applies on every browser automatically.
+- Each field roster row shows a dashed **training chip** — change it there, or in **Setup → Training edits** for bulk changes. Your edits win over the built-in sheet and survive updates.
+- Kappa (bath crew) reps have no entry — they run the bath board as always.
+- **Pins beat training**: pin anyone you want, the row just gets a `PIN OVERRIDE: not trained for …` flag.
+- If nobody on the roster is trained for a lead, it stays unfilled with the reason spelled out (`UNFILLED — nobody on this roster is trained for Siding`).
 
 The **bath bench** under the bath board uses the same format as the field bench — one row per unused Kappa rep showing where they're starting from (home in the morning, their last lead's city when chaining PM/EVE from a prior board) and their 60-day volume. The downloaded .xlsx carries the same block.
 

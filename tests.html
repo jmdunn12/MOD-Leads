@@ -1368,6 +1368,112 @@ function runAll(E){
     ok('ALL mode: edit flagged on the row',
       dc1.flags.some(function(f){ return /Opportunity edited by hand/.test(f); }), JSON.stringify(dc1.flags));
   })();
+
+  // =====================================================================
+  //          TRAINING — component certification (manager rule 2026-11-05)
+  // =====================================================================
+
+  group('Training — spec parsing');
+  (function(){
+    var all = E.parseTraining('ALL');
+    eq('ALL covers every field component',
+       E.missingTraining(all, ['Windows','Doors','Siding','Gutters','Roofing']).length, 0);
+    eq('…but NOT bath (that needs an explicit "& BATH")',
+       E.missingTraining(all, ['Bath']).join(''), 'Bath');
+    eq('ALL & BATH covers bath too',
+       E.missingTraining(E.parseTraining('ALL & BATH'), ['Bath','Windows']).length, 0);
+    eq('W/D/G misses Siding', E.missingTraining(E.parseTraining('W/D/G'), ['Siding']).join(''), 'Siding');
+    eq('W/D/G covers a windows lead', E.missingTraining(E.parseTraining('W/D/G'), ['Windows']).length, 0);
+    eq('W/D/G/S & BATH still misses Roofing',
+       E.missingTraining(E.parseTraining('W/D/G/S & BATH'), ['Roofing']).join(''), 'Roofing');
+    eq('combo lead needs EVERY component: W/D/G on Siding+Gutters misses Siding',
+       E.missingTraining(E.parseTraining('W/D/G'), ['Siding','Gutters']).join(''), 'Siding');
+    ok('lower case works', E.missingTraining(E.parseTraining('w/d/g & bath'), ['Bath']).length === 0);
+    ok('"ANY" = no limit', E.parseTraining('ANY') === null);
+    ok('blank = no limit', E.parseTraining('') === null && E.parseTraining(null) === null);
+    eq('no entry = no constraint', E.missingTraining(null, ['Siding','Bath']).length, 0);
+    eq('built-in sheet shipped (Marc Rose = W/D/G)', E.DEFAULT_TRAINING['marc rose'], 'W/D/G');
+  })();
+
+  group('Training — assignments respect certification');
+  (function(){
+    // A siding lead must skip the stronger-but-untrained rep for the trained one.
+    var strong = rep('ajet doroci','bowie|md');
+    var trained = rep('james archy','laurel|md');
+    var lead = mkLead({ 'Product':'SIDING', 'City':'Bowie' });
+    var inp = mkInput([lead], [strong, trained],
+      { training:{ 'ajet doroci':'W/D/G', 'james archy':'W/D/G/S & BATH' }, floor:0 });
+    inp.d60['ajet doroci'] = { nsli:20000, close:50, issued:60, vol:900000 };   // he'd win on score
+    var r = E.run(inp);
+    ok('siding lead goes to the siding-trained rep', r.rows[0].rep && r.rows[0].rep.c === 'james archy',
+       r.rows[0].rep ? r.rows[0].rep.c : 'unfilled');
+    // Same two reps, a windows lead: both trained, normal scoring picks freely.
+    var rWin = E.run(mkInput([mkLead({ 'City':'Bowie' })], [strong, trained],
+      { training:{ 'ajet doroci':'W/D/G', 'james archy':'W/D/G/S & BATH' } }));
+    ok('windows lead still assigns normally', rWin.rows[0].rep !== null);
+    // Nobody trained: the lead goes unfilled and says why.
+    var rNone = E.run(mkInput([mkLead({ 'Product':'ROOFING', 'City':'Bowie', 'Notes':'roof quote' })],
+      [strong], { training:{ 'ajet doroci':'W/D/G' }, floor:0 }));
+    eq('roofing lead unfilled when nobody has R', rNone.rows[0].rep, null);
+    ok('…and the flag names the gap',
+       rNone.rows[0].flags.some(function(f){ return /trained for/.test(f) && /Roofing/.test(f); }),
+       JSON.stringify(rNone.rows[0].flags));
+    // No training input at all: behaves exactly as before the rule.
+    var rFree = E.run(mkInput([mkLead({ 'Product':'SIDING', 'City':'Bowie' })], [strong], { floor:0 }));
+    ok('rep with no training entry runs anything', rFree.rows[0].rep !== null);
+  })();
+
+  group('Training — bath overflow needs "& BATH"');
+  (function(){
+    // No Kappa reps; the bath lead overflows to the field bench. Only the
+    // '& BATH' rep qualifies, even though the ALL rep would outscore him.
+    var allOnly = rep('ajet doroci','bowie|md');
+    var bathToo = rep('will perna','laurel|md');
+    var bathLead = mkLead({ 'Customer Name':'Tub', 'Product':'BATHSYSTEM', 'City':'Bowie' });
+    var inp = mkInput([bathLead], [allOnly, bathToo],
+      { training:{ 'ajet doroci':'ALL', 'will perna':'ALL & BATH' } });
+    inp.d60['ajet doroci'] = { nsli:20000, close:50, issued:60, vol:900000 };
+    var r = E.run(inp);
+    var row = r.bathRows[0];
+    ok('overflow picked the bath-trained rep', row.rep && row.rep.c === 'will perna',
+       row.rep ? row.rep.c : 'unfilled');
+    ok('…as overflow', row.overflow === true);
+    // Only the ALL (no bath) rep available: the lead stays uncovered and says why.
+    var r2 = E.run(mkInput([bathLead], [allOnly], { training:{ 'ajet doroci':'ALL' } }));
+    eq('bath lead uncovered with no bath-trained bench', r2.bathRows[0].rep, null);
+    ok('…flag says the bench is not bath-trained',
+       r2.bathRows[0].flags.some(function(f){ return /bath-trained/.test(f); }),
+       JSON.stringify(r2.bathRows[0].flags));
+  })();
+
+  group('Training — pins override the rule but get flagged');
+  (function(){
+    var ajet = rep('ajet doroci','bowie|md');
+    var lead = mkLead({ 'Product':'SIDING', 'City':'Bowie' });
+    var r = E.run(mkInput([lead], [ajet],
+      { training:{ 'ajet doroci':'W/D/G' }, manualPins:{ 0:'ajet doroci' }, floor:0 }));
+    ok('pin sticks', r.rows[0].rep && r.rows[0].rep.c === 'ajet doroci');
+    ok('…with a training override flag',
+       r.rows[0].flags.some(function(f){ return /PIN OVERRIDE: not trained for Siding/.test(f); }),
+       JSON.stringify(r.rows[0].flags));
+  })();
+
+  group('Training — ALL-markets mode forwards it');
+  (function(){
+    var titus = rep('titus smith','bowie|md'); titus.rank.team = 'Beta';
+    var rank = { 'titus smith':titus.rank }, homes = { 'titus smith':titus.home };
+    var d60 = { 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    var leads = [ mkLead({ 'Customer Name':'Sid', 'Product':'SIDING', 'City':'Bowie', 'State':'MD', 'Market':'DC Metro' }) ];
+    leads.forEach(function(l, i){ l._row = i + 2; });
+    var r = E.runAllMarkets({ slot:'AM', leads:leads,
+      rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':[] },
+      bathRoster:[], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{},
+      training:{ 'titus smith':'W/D/G' }, floorBy:{ 'DC Metro':0 } });
+    eq('ALL mode: untrained siding lead unfilled', r.rows[0].rep, null);
+    ok('ALL mode: training flag present',
+       r.rows[0].flags.some(function(f){ return /trained for/.test(f); }), JSON.stringify(r.rows[0].flags));
+  })();
 }
 </script>
 </body>
