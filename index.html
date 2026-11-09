@@ -86,6 +86,8 @@ label.lbl{font-size:12.5px;color:var(--ink);font-weight:700;text-transform:upper
 .reps input{width:17px;height:17px;flex:none;accent-color:var(--accent)}
 .reps .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .reps .hm{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
+.reps .teamHead{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:8px 4px 3px;border-bottom:1px solid var(--line)}
 .reps .trainSel{flex:none;margin-left:auto;max-width:112px;font-size:10px;padding:2px 3px;
   border:1px dashed var(--line);border-radius:4px;background:var(--bench);color:var(--ink);cursor:pointer}
 .reps label:has(.trainSel) .hm{margin-left:0;overflow:hidden;text-overflow:ellipsis}
@@ -2192,7 +2194,16 @@ function buildRoster(){
       return;
     }
     if(!state.rosters[M]) state.rosters[M] = {};
-    names.forEach(function(c){ field.appendChild(repRow(c, homes, state.rosters[M], updateRun, null, true)); });
+    // Team sections in schedule order (Beta before Delta), alphabetical inside —
+    // mirrors the sales-schedule sheet so checking off who's on for the slot is
+    // a straight top-to-bottom match (manager ask 2026-11-09).
+    var rank = rankAll();
+    (E.TEAMS_BY_MARKET[M] || []).forEach(function(T){
+      var members = names.filter(function(c){ return rank[c].team === T; });
+      if(!members.length) return;
+      field.appendChild(el('div', { class:'teamHead', text: T + ' (' + members.length + ')' }));
+      members.forEach(function(c){ field.appendChild(repRow(c, homes, state.rosters[M], updateRun, null, true)); });
+    });
   });
   var bathNames = bathReps();
   if(!bathNames.length){

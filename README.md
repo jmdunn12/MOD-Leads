@@ -55,7 +55,7 @@ The **Team** column on your power ranking assigns every rep to one of five teams
 
 When you pick a market:
 - Only leads in that market's Market column are considered
-- The field-roster checklist shows only that market's reps
+- The field-roster checklist shows only that market's reps, grouped by team in sales-schedule order (all Beta reps A→Z, then all Delta reps A→Z) so you can check off who's on schedule straight down the sheet
 - Kappa reps never appear as field candidates in any market
 - Roster presets are per-market
 
