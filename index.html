@@ -80,11 +80,11 @@ label.lbl{font-size:12.5px;color:var(--ink);font-weight:700;text-transform:upper
 .chip.no{border-color:var(--bad-line);background:var(--bad)}
 .chip.warn{border-color:var(--warn-line);background:var(--warn)}
 
-.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:2px}
+.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:2px}
 .reps label{display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:4px;cursor:pointer;min-height:38px}
 .reps label:hover{background:var(--bench)}
 .reps input{width:17px;height:17px;flex:none;accent-color:var(--accent)}
-.reps .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reps .nm{white-space:nowrap;flex:none}   /* full name always visible — the city hint shrinks instead */
 .reps .hm{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
 .reps .teamHead{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:8px 4px 3px;border-bottom:1px solid var(--line)}
@@ -2163,7 +2163,7 @@ function repRow(c, homes, checkedMap, onChange, extraHint, withTraining){
   var kids = [
     cb,
     el('span', { class:'nm', text: E.title(c) }),
-    el('span', { class:'hm', text: hint })
+    el('span', { class:'hm', text: hint, title: hint })
   ];
   if(withTraining) kids.push(trainingChip(c));
   return el('label', { for:id }, kids);
