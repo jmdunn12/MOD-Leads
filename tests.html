@@ -1395,6 +1395,16 @@ function runAll(E){
     eq('built-in sheet shipped (Marc Rose = W/D/G)', E.DEFAULT_TRAINING['marc rose'], 'W/D/G');
   })();
 
+  group('Team overrides — shipped corrections beat a stale ranking file');
+  (function(){
+    eq('Sugy Yi corrected to Delta', E.DEFAULT_TEAM_OVERRIDES['sugy yi'], 'Delta');
+    eq('Chukwudubem Okafor corrected to Delta', E.DEFAULT_TEAM_OVERRIDES['chukwudubem okafor'], 'Delta');
+    ok('every override names a real team', Object.keys(E.DEFAULT_TEAM_OVERRIDES).every(function(c){
+      var t = E.DEFAULT_TEAM_OVERRIDES[c];
+      return t === E.BATH_TEAM || E.MARKETS.some(function(m){ return (E.TEAMS_BY_MARKET[m]||[]).indexOf(t) >= 0; });
+    }));
+  })();
+
   group('Training — assignments respect certification');
   (function(){
     // A siding lead must skip the stronger-but-untrained rep for the trained one.

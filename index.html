@@ -403,6 +403,14 @@ var DEFAULT_HOME_OVERRIDES = {
   'jeremy dortch':      'greenbelt|md'   // corrected 2026-11-05 (manager's ask)
 };
 
+// Team corrections for reps whose Team column in the power ranking is stale.
+// Applied at run time over whatever the uploaded file says, so they reach every
+// browser without a re-upload; drop an entry once the ranking file catches up.
+var DEFAULT_TEAM_OVERRIDES = {
+  'sugy yi':            'Delta',   // corrected 2026-11-09 (manager's ask)
+  'chukwudubem okafor': 'Delta'    // corrected 2026-11-09 (manager's ask)
+};
+
 // Component training per rep (manager's sheet, 2026-11-05). Specs read exactly as
 // written on the sheet: W=Windows D=Doors G=Gutters S=Siding R=Roofing, BATH=bath
 // systems, ALL=every field component (bath still needs an explicit '& BATH').
@@ -1650,6 +1658,7 @@ global.ENGINE = {
   DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
   DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
   DEFAULT_TRAINING: DEFAULT_TRAINING, parseTraining: parseTraining, missingTraining: missingTraining,
+  DEFAULT_TEAM_OVERRIDES: DEFAULT_TEAM_OVERRIDES,
   CITY_ALIASES: CITY_ALIASES, BOTTOM_EXCLUDE: BOTTOM_EXCLUDE,
   low: low, canon: canon, title: title, splitLoc: splitLoc, geoLookup: geoLookup, originDisp: originDisp,
   parseWindows: parseWindows, parseDoors: parseDoors, bareNumber: bareNumber, stripTimes: stripTimes,
@@ -1762,7 +1771,8 @@ function load(){
   });
   // Departed reps shipped in code (manager's ask): hidden from every roster, once
   // per browser — restoring them in Manage reps afterwards sticks.
-  var SEED_REMOVALS = ['adam diaz', 'neil waranch', 'david nettle'];   // removed 2026-10-30
+  var SEED_REMOVALS = ['adam diaz', 'neil waranch', 'david nettle',   // removed 2026-10-30
+                       'samuel morris'];                              // removed 2026-11-09
   SEED_REMOVALS.forEach(function(c){
     var key = 'removed:' + c;
     if(store.seededReps.indexOf(key) >= 0) return;
@@ -2072,6 +2082,11 @@ function rankAll(){
     E.PRODUCTS.forEach(function(p){ rec[p] = { leads:0, close:0, nsli:0 }; });
     rec._tot = { leads:0, close:0, nsli:0 };
     r[c] = rec;
+  });
+  // Shipped team corrections beat a stale Team column in the uploaded ranking
+  // (clone the record — r is a shallow copy of the stored file data).
+  Object.keys(E.DEFAULT_TEAM_OVERRIDES).forEach(function(c){
+    if(r[c]) r[c] = Object.assign({}, r[c], { team: E.DEFAULT_TEAM_OVERRIDES[c] });
   });
   return r;
 }

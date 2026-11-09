@@ -53,6 +53,8 @@ After a run, click **Save board** (next to Download). The finished board is stor
 The **Team** column on your power ranking assigns every rep to one of five teams:
 `Beta` and `Delta` are DC Metro, `Gamma-VAB` is Hampton Roads, `Gamma-RVA` is Richmond, `Kappa` is the bath crew.
 
+If the ranking file's Team column is out of date for someone, the app ships built-in team corrections that quietly win over the file (currently: Sugy Yi and Chukwudubem Okafor → Delta). Tell the maintainer when a rep changes teams and it'll be added here.
+
 When you pick a market:
 - Only leads in that market's Market column are considered
 - The field-roster checklist shows only that market's reps, grouped by team in sales-schedule order (all Beta reps A→Z, then all Delta reps A→Z) so you can check off who's on schedule straight down the sheet
