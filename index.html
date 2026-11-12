@@ -283,6 +283,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
         <select id="presetSel" style="width:auto;min-width:170px"><option value="">Roster presets…</option></select>
         <button class="sm" id="presetSave">Save current</button>
         <button class="sm" id="presetDel">Delete</button>
+        <button class="sm" id="rosterAll">Select all</button>
         <button class="sm" id="rosterNone">Clear</button>
       </div>
       <div class="reps" id="reps"><span class="muted">Upload the reference files above to build the rep list.</span></div>
@@ -2311,8 +2312,21 @@ $('#presetDel').addEventListener('click', function(){
   if(!confirm('Delete ' + state.market + ' roster preset "' + k + '"?')) return;
   delete marketPresets()[k]; save(); refreshPresets();
 });
+// Select all / Clear are mirrors: both touch the field list(s) on screen AND the
+// bath crew, so "Select all, then uncheck who's off today" matches the schedule fast.
+$('#rosterAll').addEventListener('click', function(){
+  var markets = state.market === 'ALL' ? E.MARKETS : [state.market];
+  markets.forEach(function(M){
+    if(!state.rosters[M]) state.rosters[M] = {};
+    repsForMarket(M).forEach(function(c){ state.rosters[M][c] = true; });
+  });
+  bathReps().forEach(function(c){ state.bathRoster[c] = true; });
+  buildRoster();
+});
 $('#rosterNone').addEventListener('click', function(){
-  state.rosters[state.market] = {}; state.bathRoster = {}; buildRoster();
+  var markets = state.market === 'ALL' ? E.MARKETS : [state.market];
+  markets.forEach(function(M){ state.rosters[M] = {}; });
+  state.bathRoster = {}; buildRoster();
 });
 
 // ---------------- market ----------------

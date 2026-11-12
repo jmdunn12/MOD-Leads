@@ -60,6 +60,7 @@ When you pick a market:
 - The field-roster checklist shows only that market's reps, grouped by team in sales-schedule order (all Beta reps A→Z, then all Delta reps A→Z) so you can check off who's on schedule straight down the sheet
 - Kappa reps never appear as field candidates in any market
 - Roster presets are per-market
+- **Select all** checks every rep shown (bath crew included) — fastest way to match the schedule is Select all, then uncheck whoever's off; **Clear** unchecks everyone
 
 ### How bath leads flow
 
