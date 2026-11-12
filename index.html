@@ -347,7 +347,11 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
 'use strict';
 
 // ---- tuning knobs (keep in sync with lead_engine.py) ----
-var CONST = { K:12, K2:8, VOL_ADD:10000, DRIVE_PEN:40 };
+// K lowered 12 -> 3 on 2026-11-12 (manager rule): the 2-week product report now
+// carries roughly EQUAL weight with the 60-day baseline — a rep with 3 product
+// leads (the roster median) splits 50/50, and the roster-wide average product
+// weight is ~50% (was ~23%). Deliberate divergence from lead_engine.py's K=12.
+var CONST = { K:3, K2:8, VOL_ADD:10000, DRIVE_PEN:40 };
 
 // per-market defaults (override in settings)
 var DEFAULT_FLOOR = { 'DC Metro':5000, 'Hampton Roads':5000, 'Richmond':5000 };

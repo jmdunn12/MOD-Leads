@@ -941,12 +941,14 @@ function runAll(E){
     var ctx = { rank:{ 'titus smith':a.rank }, d60:{ 'titus smith':{ nsli:9000, close:32, issued:40, vol:360000 } },
       global60:9000, geo:E.DEFAULT_GEO, avail:[{ c:'titus smith', disp:'Titus Smith', home:'bowie', origin:'bowie' }] };
     var S = E.makeScorer(ctx);
+    // K pinned by manager rule 2026-11-12: 2-week product report ~equal to 60-day
+    eq('K pinned at 3', E.CONST.K, 3);
     // rep_prior = (40*9000 + 8*9000)/(40+8) = 9000
-    // eff = (20*8000 + 12*9000)/(20+12) = (160000+108000)/32 = 8375
-    ok('eff() matches the documented formula', Math.abs(S.eff('titus smith','Windows') - 8375) < 0.5,
+    // eff = (20*8000 + 3*9000)/(20+3) = 187000/23 ≈ 8130.43
+    ok('eff() matches the documented formula', Math.abs(S.eff('titus smith','Windows') - 187000/23) < 0.5,
        String(S.eff('titus smith','Windows')));
     ok('base_val of a combo is the mean of components',
-       Math.abs(S.baseVal('titus smith', ['Windows','Doors']) - 8375) < 0.5);
+       Math.abs(S.baseVal('titus smith', ['Windows','Doors']) - 187000/23) < 0.5);
     eq('volnorm of the only rep is 1', S.volnorm('titus smith'), 1);
     ok('tiebreak is small and positive', S.tiebreak('titus smith') > 0 && S.tiebreak('titus smith') < 1);
 
@@ -955,7 +957,7 @@ function runAll(E){
     var S2 = E.makeScorer(ctx2);
     // rep_prior = (0*1000 + 8*9000)/(0+8) = 9000 → fully shrunk to global
     ok('K2 shrinks a zero-issued rep fully to the global average',
-       Math.abs(S2.eff('titus smith','Windows') - 8375) < 0.5, String(S2.eff('titus smith','Windows')));
+       Math.abs(S2.eff('titus smith','Windows') - 187000/23) < 0.5, String(S2.eff('titus smith','Windows')));
 
     eq('global60 = total net / total issued', E.global60Of({ a:{ vol:1000, issued:10 }, b:{ vol:3000, issued:10 } }), 200);
 
