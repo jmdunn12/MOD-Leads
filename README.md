@@ -66,7 +66,7 @@ When you pick a market:
 
 Any lead with a bath component — pure `BATHSYSTEM` **or a bath combo** like `COMBO_BATH_WIN_DOR` — comes off the field board automatically and lands on a separate **Bath Board** section:
 
-1. **Kappa first** — bath leads fill from your checked Kappa reps.
+1. **Kappa first, DC Metro only** — DC Metro bath leads fill from your checked Kappa reps. Kappa never runs Hampton Roads or Richmond baths (rule 2026-11-19): those markets' bath leads go straight to step 2, and a Kappa rep checked on a non-DC run is surfaced in a warning, not assigned.
 2. **Field overflow** — if there are more bath leads than Kappa can cover, the extras go to reps who ended up on the field bench, ranked by their **bath** score. Only bench reps whose training includes **BATH** qualify (see *Component training* below). Those overflow reps disappear from the field bench so nobody's double-booked.
 3. Overflow rows are highlighted yellow with an "OVERFLOW" flag — clear at a glance which reps came from field.
 4. **Bath rows have the same Pin dropdown as field rows** — Kappa crew listed first, then field reps. Pick a rep, hit Re-run, and the lead is theirs (flagged `PINNED by hand`); the rest of the bath board re-optimizes around the pin. Pinning a field rep onto a bath lead is allowed and flagged as an overflow pin — and that rep comes **off the field bench**, same as any assignment. (The reverse holds too: a Kappa rep pinned onto a field lead leaves the bath bench and the shared Kappa pool.)

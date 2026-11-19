@@ -257,6 +257,16 @@ function runAll(E){
     eq('"forty windows" = 40 (at the clamp)', E.parseWindows('forty windows').count, 40);
     eq('"often windows" counts nothing', E.parseWindows('they often get windows quoted').count, 0);
     eq('"eighteen dhw" = 18 (word + shorthand)', E.parseWindows('eighteen dhw').count, 18);
+    // word/digit parity spot-checks (manager ask 2026-11-19): same count either way
+    eq('"eighteen windows" = "18 windows"', E.parseWindows('eighteen windows').count, E.parseWindows('18 windows').count);
+    eq('"one window" = "1 window"', E.parseWindows('one window').count, E.parseWindows('1 window').count);
+    eq('"one window" reads as 1', E.parseWindows('one window').count, 1);
+    eq('"one front door" = "1 front door"', E.parseDoors('one front door').count, E.parseDoors('1 front door').count);
+    eq('"two sliding glass doors" = 2 sliding', E.parseDoors('two sliding glass doors').count, 2);
+    eq('"one fe" = 1 front door', E.parseDoors('one fe').types, ['front']);
+    eq('"three to five windows" floors BIG like "3-5"',
+       E.windowRangeFloor(E.parseWindows('three to five windows').ranges), 'BIG');
+    eq('"one legger" still counts nothing', E.parseWindows('one legger, needs quote').count, 0);
     var thirty = E.describeLead(mkLead({ Product:'WINDOWS', Notes:'SFH, thirty windows, OK w/ vinyl' }), null);
     eq('full lead: "thirty windows" → 30W, BIG (>8 rule)', thirty.w + '/' + thirty.tier, '30/BIG');
     eq('opp box: "dozen windows" → BIG', E.tierOfOpportunity(E.describeOpportunity('dozen windows')), 'BIG');
@@ -745,6 +755,58 @@ function runAll(E){
     ok('ALL: the Richmond bath lead is unfilled, not double-booked',
        r2.bathRows.some(function(x){ return !x.rep && x.lead['Customer Name'] === 'RVA Bath'; }));
     ok('ALL: pinned Kappa rep not on the bath bench', !r2.bathBench.some(function(b){ return b.c === 'malcolm kerr'; }));
+  })();
+
+  group('Kappa serves DC Metro baths only (manager rule 2026-11-19)');
+  (function(){
+    var kerr = rep('malcolm kerr','washington|dc', { team:'Kappa' });
+    var ludwig = rep('samantha ludwig','virginia beach|va', { team:'Gamma-VAB' });
+    var hrBath = mkLead({ 'Customer Name':'HR Tub', 'Product':'BATHSYSTEM',
+      'City':'Virginia Beach', 'State':'VA', 'Market':'Hampton Roads' });
+
+    // single-market Hampton Roads run: Kappa checked but never assigned
+    var inp = mkInput([hrBath], [ludwig], { bathReps:[kerr], floor:0 });
+    inp.market = 'Hampton Roads';
+    var r = E.run(inp);
+    ok('Kappa rep surfaced as wrong market, not silently dropped',
+       r.wrongTeamBath.some(function(w){ return w.rep === 'malcolm kerr' && /DC Metro baths only/.test(w.reason); }),
+       JSON.stringify(r.wrongTeamBath));
+    eq('HR bath lead overflows to the local field rep instead', r.bathRows[0].rep.c, 'samantha ludwig');
+    ok('…flagged as overflow', r.bathRows[0].overflow);
+
+    // same crew in DC Metro: Kappa takes the bath lead as always
+    var dcBath = mkLead({ 'Customer Name':'DC Tub', 'Product':'BATHSYSTEM' });
+    var r2 = E.run(mkInput([dcBath], [rep('titus smith','bowie')], { bathReps:[kerr], floor:0 }));
+    eq('DC Metro bath lead still goes to Kappa', r2.bathRows[0].rep.c, 'malcolm kerr');
+    eq('no wrong-team warning in DC Metro', r2.wrongTeamBath.length, 0);
+
+    // ALL-markets mode: a FREE Kappa rep still never takes another market's bath lead
+    var rank = { 'malcolm kerr':kerr.rank, 'samantha ludwig':ludwig.rank };
+    var homes = { 'malcolm kerr':kerr.home, 'samantha ludwig':ludwig.home };
+    var d60 = { 'malcolm kerr':{ nsli:9000, close:32, issued:40, vol:360000 },
+                'samantha ludwig':{ nsli:9000, close:32, issued:40, vol:360000 } };
+    var leads3 = [ mkLead({ 'Customer Name':'DC Tub', 'Product':'BATHSYSTEM' }), hrBath ];
+    leads3.forEach(function(l, i){ l._row = i + 2; });
+    var r3 = E.runAllMarkets({
+      slot:'AM', leads:leads3,
+      rosters:{ 'DC Metro':[], 'Hampton Roads':['samantha ludwig'], 'Richmond':[] },
+      bathRoster:['malcolm kerr'], rank:rank, d60:d60, global60:9000, homes:homes, origins:{},
+      geo:null, aliases:null, prodMap:null, floorBy:{ 'DC Metro':0, 'Hampton Roads':0, 'Richmond':0 }
+    });
+    var dcRow = r3.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'DC Tub'; })[0];
+    var hrRow = r3.bathRows.filter(function(x){ return x.lead['Customer Name'] === 'HR Tub'; })[0];
+    eq('ALL: DC bath lead goes to Kappa', dcRow.rep.c, 'malcolm kerr');
+    ok('ALL: HR bath lead never goes to Kappa', !hrRow.rep || hrRow.rep.c !== 'malcolm kerr',
+       hrRow.rep ? hrRow.rep.c : 'unfilled');
+    eq('ALL: HR bath lead overflows to its own field rep', hrRow.rep && hrRow.rep.c, 'samantha ludwig');
+    eq('ALL: no wrong-team spray from the non-DC sub-runs', r3.wrongTeamBath.length, 0);
+
+    // backward compat: a teamless bath fixture is not market-gated
+    var inp4 = mkInput([hrBath], [], { bathReps:[rep('no team rep','virginia beach|va', { team:undefined })], floor:0 });
+    inp4.market = 'Hampton Roads';
+    delete inp4.rank['no team rep'].team;
+    var r4 = E.run(inp4);
+    eq('teamless fixture still allowed on any bath board', r4.bathRows[0].rep.c, 'no team rep');
   })();
 
   // ---------- 6. drive + chaining ----------

@@ -292,7 +292,7 @@ td select{min-height:30px;padding:3px 6px;font-size:12px;width:auto;max-width:17
     <div class="col">
       <div class="row" style="align-items:center">
         <label class="lbl">Bath crew (Kappa) <span id="bathRosterCount" class="mono"></span></label>
-        <span class="muted" style="font-size:12px">only used when bath leads are on the sheet</span>
+        <span class="muted" style="font-size:12px">runs DC Metro bath leads only — other markets' baths go to bath-trained field reps</span>
       </div>
       <div class="reps" id="bathReps"><span class="muted">—</span></div>
     </div>
@@ -366,6 +366,9 @@ var TEAMS_BY_MARKET = {
   'Richmond':      ['Gamma-RVA']
 };
 var BATH_TEAM = 'Kappa';   // strictly bath crew — never on any field board
+// Manager rule 2026-11-19: Kappa runs DC METRO bath leads only. Bath leads in the
+// other markets go to bath-trained local field reps (overflow), never to Kappa.
+var BATH_MARKET = 'DC Metro';
 
 var CANCEL_REP  = 'james dunn';
 var SKIP_STATUS = ['open'];
@@ -1212,6 +1215,13 @@ function run(input){
       wrongTeamBath.push({rep:c, team:team, reason:'only Kappa reps belong on the bath board'});
       return false;
     }
+    // Kappa serves DC Metro only (manager rule 2026-11-19) — other markets' bath
+    // leads go to bath-trained local field reps via overflow
+    if(team === BATH_TEAM && market !== BATH_MARKET){
+      wrongTeamBath.push({rep:c, team:team,
+        reason:'Kappa runs ' + BATH_MARKET + ' baths only — ' + market + ' bath leads go to bath-trained field reps'});
+      return false;
+    }
     return true;
   }).map(makeAvail);
 
@@ -1562,8 +1572,9 @@ function originDisp(o){
 
 // ================= all-markets run =================
 // Runs every market in one pass: each market's leads against that market's crew,
-// one shared Kappa pool chained through so a bath rep is never double-booked,
-// results merged into a single board with rows tagged by market.
+// the Kappa pool handed to DC Metro only (manager rule 2026-11-19 — other markets'
+// bath leads overflow to their own field bench), results merged into a single
+// board with rows tagged by market.
 // input: { slot, leads, rosters:{market:[names]}, bathRoster:[names], rank, d60,
 //          global60, homes, origins, geo, aliases, prodMap,
 //          floorBy:{market:$}, manualPins }
@@ -1575,7 +1586,9 @@ function runAllMarkets(input){
     var sub = run({
       market: M, slot: input.slot, leads: input.leads,
       fieldRoster: (input.rosters && input.rosters[M]) || [],
-      bathRoster: bathPool,
+      // Kappa pool goes to DC Metro only (manager rule 2026-11-19) — handing it to
+      // the other sub-runs would just spray per-rep wrong-market warnings
+      bathRoster: M === BATH_MARKET ? bathPool : [],
       rank: input.rank, d60: input.d60, global60: input.global60,
       homes: input.homes, origins: input.origins, geo: input.geo,
       aliases: input.aliases, prodMap: input.prodMap, training: input.training,
@@ -1659,7 +1672,7 @@ function runAllMarkets(input){
 
 global.ENGINE = {
   CONST: CONST, PRODC: PRODC, PRODUCTS: PRODUCTS,
-  MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM,
+  MARKETS: MARKETS, TEAMS_BY_MARKET: TEAMS_BY_MARKET, BATH_TEAM: BATH_TEAM, BATH_MARKET: BATH_MARKET,
   DEFAULT_FLOOR: DEFAULT_FLOOR, DEFAULT_BOTTOM_EXCLUDE: DEFAULT_BOTTOM_EXCLUDE,
   DEFAULT_GEO: DEFAULT_GEO, DEFAULT_ALIASES: DEFAULT_ALIASES, DEFAULT_HOME_OVERRIDES: DEFAULT_HOME_OVERRIDES,
   DEFAULT_TRAINING: DEFAULT_TRAINING, parseTraining: parseTraining, missingTraining: missingTraining,
@@ -2836,7 +2849,7 @@ function renderResult(r){
     'Field-roster reps skipped for team mismatch:',
     r.wrongTeamField.map(function(w){ return E.title(w.rep) + ' — ' + w.reason; }));
   if(r.wrongTeamBath && r.wrongTeamBath.length) notice('warn',
-    'Bath-roster reps skipped (not on Kappa):',
+    'Bath-roster reps skipped:',
     r.wrongTeamBath.map(function(w){ return E.title(w.rep) + ' — ' + w.reason; }));
   if(r.unknownProducts.length) notice('warn', 'Unknown product codes — scored as Windows:', [r.unknownProducts.join(', ') + ' — add a mapping in Setup › Product mappings.']);
   var longDrives = r.rows.concat(r.bathRows).filter(function(x){ return x.drive !== null && x.drive > 75; });
