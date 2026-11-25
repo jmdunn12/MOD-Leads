@@ -809,6 +809,36 @@ function runAll(E){
     eq('teamless fixture still allowed on any bath board', r4.bathRows[0].rep.c, 'no team rep');
   })();
 
+  group('Bath bench populated with zero bath leads (fix 2026-11-25)');
+  (function(){
+    var kerr = rep('malcolm kerr','washington|dc', { team:'Kappa' });
+    var hoosier = rep('bruce hoosier','upperco|md', { team:'Kappa' });
+
+    // single-market DC run: one field lead, bath crew checked, NO bath leads —
+    // the checked crew must still come back as the bath bench
+    var r = E.run(mkInput([ mkLead({ 'Customer Name':'Field A', 'City':'Bowie' }) ],
+      [rep('titus smith','bowie')], { bathReps:[kerr, hoosier] }));
+    eq('no bath rows', r.bathRows.length, 0);
+    eq('both checked bath reps are on the bath bench', r.counts.bathBench, 2);
+    ok('bench holds both names', ['malcolm kerr','bruce hoosier'].every(function(n){
+      return r.bathBench.some(function(b){ return b.c === n; }); }), JSON.stringify(r.bathBench));
+
+    // ALL-markets mode with zero leads of any kind: bench still carries the full crew
+    var rank = { 'malcolm kerr':kerr.rank, 'bruce hoosier':hoosier.rank };
+    var homes = { 'malcolm kerr':kerr.home, 'bruce hoosier':hoosier.home };
+    var d60 = { 'malcolm kerr':{ nsli:9000, close:32, issued:40, vol:360000 },
+                'bruce hoosier':{ nsli:9000, close:32, issued:40, vol:300000 } };
+    var r2 = E.runAllMarkets({
+      slot:'AM', leads:[],
+      rosters:{ 'DC Metro':[], 'Hampton Roads':[], 'Richmond':[] },
+      bathRoster:['malcolm kerr','bruce hoosier'], rank:rank, d60:d60, global60:9000,
+      homes:homes, origins:{}, geo:null, aliases:null, prodMap:null
+    });
+    eq('ALL: zero bath rows', r2.bathRows.length, 0);
+    eq('ALL: bath bench carries the whole checked crew', r2.counts.bathBench, 2);
+    eq('ALL: bench sorted by 60-day volume', r2.bathBench[0].c, 'malcolm kerr');
+  })();
+
   // ---------- 6. drive + chaining ----------
   group('Drive estimate');
   (function(){

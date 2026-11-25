@@ -90,7 +90,7 @@ Every assignment checks the rep's **training** against the lead's components —
 - **Pins beat training**: pin anyone you want, the row just gets a `PIN OVERRIDE: not trained for …` flag.
 - If nobody on the roster is trained for a lead, it stays unfilled with the reason spelled out (`UNFILLED — nobody on this roster is trained for Siding`).
 
-The **bath bench** under the bath board uses the same format as the field bench — one row per unused Kappa rep showing where they're starting from (home in the morning, their last lead's city when chaining PM/EVE from a prior board) and their 60-day volume. The downloaded .xlsx carries the same block.
+The **bath bench** under the bath board uses the same format as the field bench — one row per unused Kappa rep showing where they're starting from (home in the morning, their last lead's city when chaining PM/EVE from a prior board) and their 60-day volume. The downloaded .xlsx carries the same block. The bench shows **even on days with zero bath leads** — a checked bath crew never silently disappears from the board (fix 2026-11-25) — and a "bath bench" count appears in the summary chips.
 
 ---
 
