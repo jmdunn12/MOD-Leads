@@ -439,7 +439,7 @@ var DEFAULT_TRAINING = {
   'dustin jones':'ALL & BATH',        'franklin hill':'ALL & BATH',
   'hunter willson':'W/D/G/S',         'jacob szczepanik':'W/D/G',
   'jeffrey kaelin':'ALL',             'john-paul feeney':'W/D/G & BATH',
-  'joshua brown':'W/D/G',             'marc rose':'W/D/G',
+  'joshua brown':'W/D/G',
   'sugy yi':'W/D/G',                  'titus smith':'W/D/G & BATH',
   'wojciech kowalski':'ALL',
   // Gamma-RVA
@@ -1790,7 +1790,8 @@ function load(){
   // Departed reps shipped in code (manager's ask): hidden from every roster, once
   // per browser — restoring them in Manage reps afterwards sticks.
   var SEED_REMOVALS = ['adam diaz', 'neil waranch', 'david nettle',   // removed 2026-10-30
-                       'samuel morris'];                              // removed 2026-11-09
+                       'samuel morris',                               // removed 2026-11-09
+                       'marc rose'];                                  // removed 2026-11-26
   SEED_REMOVALS.forEach(function(c){
     var key = 'removed:' + c;
     if(store.seededReps.indexOf(key) >= 0) return;
@@ -3347,7 +3348,7 @@ $('#btnHomeOv').addEventListener('click', function(){
 $('#btnTraining').addEventListener('click', function(){
   keyValEditor('Training edits', store.training, {
     help:'Your changes on top of the built-in training sheet. Letters: W windows, D doors, G gutters, S siding, R roofing; add "& BATH" for bath systems; ALL = every field product; ANY = no limit. The dashed chip on each roster row edits the same thing.',
-    kph:'rep name (e.g. marc rose)', vph:'e.g. W/D/G & BATH, ALL, ANY',
+    kph:'rep name (e.g. titus smith)', vph:'e.g. W/D/G & BATH, ALL, ANY',
     fmt:function(v){ return String(v); },
     parse:function(s){ return s.trim() ? s.trim().toUpperCase() : null; }
   });

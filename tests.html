@@ -1486,7 +1486,9 @@ function runAll(E){
     ok('"ANY" = no limit', E.parseTraining('ANY') === null);
     ok('blank = no limit', E.parseTraining('') === null && E.parseTraining(null) === null);
     eq('no entry = no constraint', E.missingTraining(null, ['Siding','Bath']).length, 0);
-    eq('built-in sheet shipped (Marc Rose = W/D/G)', E.DEFAULT_TRAINING['marc rose'], 'W/D/G');
+    eq('built-in sheet shipped (Joshua Brown = W/D/G)', E.DEFAULT_TRAINING['joshua brown'], 'W/D/G');
+    ok('departed reps are off the shipped sheet (Marc Rose removed 2026-11-26)',
+       !('marc rose' in E.DEFAULT_TRAINING));
   })();
 
   group('Team overrides — shipped corrections beat a stale ranking file');
