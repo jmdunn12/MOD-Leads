@@ -55,6 +55,8 @@ The **Team** column on your power ranking assigns every rep to one of five teams
 
 If the ranking file's Team column is out of date for someone, the app ships built-in team corrections that quietly win over the file (currently: Sugy Yi and Chukwudubem Okafor → Delta). Tell the maintainer when a rep changes teams and it'll be added here.
 
+The same goes for name spellings: built-in aliases fold variant spellings of the same rep into one (e.g. **Timothy Waters = Tim Waters**, added 2026-11-28 after he showed up twice). Aliases apply to files you've **already uploaded** — no re-upload needed. If a rep ever shows up twice, it's two spellings of their name across files: tell the maintainer, or add your own alias under Setup → Name aliases.
+
 When you pick a market:
 - Only leads in that market's Market column are considered
 - The field-roster checklist shows only that market's reps, grouped by team in sales-schedule order (all Beta reps A→Z, then all Delta reps A→Z) so you can check off who's on schedule straight down the sheet

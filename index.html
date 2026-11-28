@@ -400,7 +400,10 @@ var DEFAULT_ALIASES = {
   'zach diffenderfer':'zachary diffenderfer','zach diff':'zachary diffenderfer',
   'hunter w':'hunter willson','jacob s':'jacob szczepanik',
   'stepehn bryan':'stephen bryan','titus smtih':'titus smith',
-  'bradley griffin':'bradley griffen'
+  'bradley griffin':'bradley griffen',
+  // 2026-11-28: company files use the full first name — without this he shows
+  // up twice (seeded 'tim waters' + the file's 'timothy waters')
+  'timothy waters':'tim waters'
 };
 
 var DEFAULT_HOME_OVERRIDES = {
@@ -2069,11 +2072,27 @@ function refreshRefs(){
 }
 
 // ---------------- roster ----------------
+// Re-key a name-keyed map through the CURRENT aliases. Uploaded files are stored
+// under their raw parsed names, so an alias shipped AFTER a manager uploaded a
+// file (e.g. 'timothy waters' -> 'tim waters', 2026-11-28) must fold the stored
+// entry at read time — otherwise the two spellings show up as two different reps
+// until the next re-upload. `better(a, b)` keeps a on a collision.
+function canonMap(m, ali, better){
+  var out = {};
+  Object.keys(m || {}).forEach(function(k){
+    var c = E.canon(k, ali);
+    if(out[c] === undefined || (better && better(m[k], out[c]))) out[c] = m[k];
+  });
+  return out;
+}
 function homesAll(){
-  var h = Object.assign({}, (store.refs && store.refs.homes) || {});
   var ali = aliasAll();
+  var h = canonMap((store.refs && store.refs.homes) || {}, ali);
   Object.keys(store.homeOverrides).forEach(function(k){ h[E.canon(k, ali)] = String(store.homeOverrides[k]).trim().toLowerCase(); });
-  Object.keys(store.manualReps).forEach(function(k){ h[E.canon(k, ali)] = String(store.manualReps[k].home || '').trim().toLowerCase(); });
+  Object.keys(store.manualReps).forEach(function(k){
+    var hm = String(store.manualReps[k].home || '').trim().toLowerCase();
+    if(hm) h[E.canon(k, ali)] = hm;   // a blank manual home never hides a file home
+  });
   return h;
 }
 // Effective training per rep: code-shipped sheet, then the manager's own edits on
@@ -2092,8 +2111,12 @@ function trainingAll(){
 // any thin-data rep. If the name already exists in the ranking file, the real data
 // wins and the manual entry only contributes their home.
 function rankAll(){
-  var r = Object.assign({}, (store.refs && store.refs.rank) || {});
   var ali = aliasAll();
+  // alias collisions keep the record with more 2-week leads — real file data
+  // beats a zero-stat variant of the same person
+  var r = canonMap((store.refs && store.refs.rank) || {}, ali, function(a, b){
+    return ((a._tot && a._tot.leads) || 0) > ((b._tot && b._tot.leads) || 0);
+  });
   Object.keys(store.manualReps).forEach(function(k){
     var c = E.canon(k, ali);
     if(r[c]) return;
@@ -2108,6 +2131,12 @@ function rankAll(){
     if(r[c]) r[c] = Object.assign({}, r[c], { team: E.DEFAULT_TEAM_OVERRIDES[c] });
   });
   return r;
+}
+// 60-day rows re-keyed the same way; a collision keeps the row with more issued leads
+function d60All(){
+  return canonMap((store.refs && store.refs.d60) || {}, aliasAll(), function(a, b){
+    return (a.issued || 0) > (b.issued || 0);
+  });
 }
 function isRemoved(c){ return store.removedReps.indexOf(c) >= 0; }
 
@@ -2506,13 +2535,14 @@ function doRun(opts){
   var info = slotSaveInfo();
   state.storedSlot = info.slot;         // 'TOMORROW_AM' stores as 'AM'
   state.shiftDateKey = info.dateKey;    // …dated tomorrow
+  var d60c = d60All();
   var common = {
     slot: info.slot,
     leads: applyCityFixes(state.leadData.rows),
     bathRoster: bathRosterList(),
     rank: rankAll(),
-    d60: store.refs.d60,
-    global60: store.refs.global60 || E.global60Of(store.refs.d60),
+    d60: d60c,
+    global60: E.global60Of(d60c),
     homes: homesAll(),
     origins: isMorningSlot(state.slot) ? {} : state.origins,   // mornings always start from home
     geo: geoAll(),
@@ -3406,9 +3436,11 @@ function renderRepsEditor(){
   var manual = Object.keys(store.manualReps).sort();
   if(manual.length){
     var mlist = el('div', { class:'scroll' });
+    // aliased file spellings count as "on the ranking" too (timothy -> tim)
+    var fileRank = canonMap((store.refs && store.refs.rank) || {}, aliasAll());
     manual.forEach(function(c){
       var v = store.manualReps[c];
-      var onRanking = !!(store.refs && store.refs.rank && store.refs.rank[c]);
+      var onRanking = !!fileRank[c];
       mlist.appendChild(el('div', { class:'kv' }, [
         el('span', { class:'k', text: E.title(c) }),
         el('span', { class:'mono', text: v.team + ' · ' + v.home + (onRanking ? ' · now on the ranking — safe to remove this entry' : '') }),

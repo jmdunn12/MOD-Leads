@@ -1082,6 +1082,16 @@ function runAll(E){
     var r = E.run(inp);
     eq('typo in roster resolves via alias, rep not silently dropped', r.rows[0].rep.c, 'titus smith');
     eq('no missing-data warning', r.missingData.length, 0);
+
+    // Timothy Waters = Tim Waters (alias 2026-11-28 — he showed up twice when the
+    // company files started using the full first name)
+    eq('Timothy Waters folds into Tim Waters', E.canon('Timothy Waters'), 'tim waters');
+    var tub = mkLead({ 'Customer Name':'Tub', 'Product':'BATHSYSTEM' });
+    var inp2 = mkInput([tub], [], { bathReps:[rep('tim waters','severna park', { team:'Kappa' })], floor:0 });
+    inp2.bathRoster = ['Timothy Waters'];   // checklist spelled the long way
+    var r2 = E.run(inp2);
+    eq('full-name roster entry lands on the seeded rep', r2.bathRows[0].rep.c, 'tim waters');
+    eq('one rep, not two — nobody left on the bath bench', r2.counts.bathBench, 0);
   })();
 
   group('Roster data integrity');
