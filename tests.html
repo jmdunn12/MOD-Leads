@@ -483,7 +483,8 @@ function runAll(E){
       JSON.stringify(edited.rows[0].flags));
     var down = E.run(mkInput(leads, reps, { oppOverrides: { 0: '2 storm doors' } }));
     eq('edit can also downgrade (storm-only → SMALL)', down.rows[0].tier, 'SMALL');
-    // BIG floor honors the edited tier: weak rep + edit to siding → unfilled
+    // BIG floor honors the edited tier: weak rep + edit to siding → the floor
+    // kicks in on the recalculated tier (and lifts as an override, rule 2026-11-28)
     var weak = rep('titus smith','bowie');
     ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
     var inpW = mkInput([ mkLead({ 'Customer Name':'Weak', 'Product':'WINDOWS', 'Notes':'3 windows', 'City':'Bowie' }) ], [weak],
@@ -491,7 +492,8 @@ function runAll(E){
     inpW.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
     inpW.global60 = 500;
     var rW = E.run(inpW);
-    ok('edited-to-BIG lead respects the BIG floor', rW.rows[0].rep === null, JSON.stringify(rW.rows[0].flags));
+    ok('edited-to-BIG lead hits the BIG floor (covered via FLOOR OVERRIDE)',
+      rW.rows[0].rep !== null && /FLOOR OVERRIDE/.test(rW.rows[0].flags[0]), JSON.stringify(rW.rows[0].flags));
   })();
 
   // ---------- 3. Hungarian ----------
@@ -877,7 +879,8 @@ function runAll(E){
   // ---------- 7. eligibility ----------
   group('Eligibility rules');
   (function(){
-    // BIG floor: rep is reachable but far below $5,000 eff NSLI
+    // BIG floor: rep is reachable but far below $5,000 eff NSLI — since 2026-11-28
+    // the floor lifts (override) instead of leaving the big lead unfilled
     var weak = rep('titus smith','bowie');
     ['Windows','Doors','Siding','Gutters','Roofing'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
     var leads = [ mkLead({ 'Customer Name':'Big One', 'Product':'SIDING', 'City':'Bowie' }) ];
@@ -885,8 +888,10 @@ function runAll(E){
     inp.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
     inp.global60 = 500;
     var r = E.run(inp);
-    eq('BIG lead below the floor is left unfilled', r.rows[0].rep, null);
-    ok('flagged as below the BIG floor', /below \$5,000 BIG floor/.test(r.rows[0].flags[0]), r.rows[0].flags[0]);
+    ok('BIG lead below the floor still gets covered', r.rows[0].rep !== null, JSON.stringify(r.rows[0].flags));
+    ok('flagged as a FLOOR OVERRIDE naming the floor', /FLOOR OVERRIDE.*\$5,000 BIG floor/.test(r.rows[0].flags[0]), r.rows[0].flags[0]);
+    ok('override row is highlighted warn', r.rows[0].state === 'warn');
+    eq('counted in counts.floorOverride', r.counts.floorOverride, 1);
 
     // no drive cap (rule 2026-07-17): even an absurd drive gets assigned, with flags
     var far = [ mkLead({ 'Customer Name':'Far', 'City':'Winchester' }) ];
@@ -905,7 +910,7 @@ function runAll(E){
     ok('unknown city surfaced for the UI form (as {city,state})',
       r3.missingGeo.some(function(m){ return m.city === 'shangri-la'; }), JSON.stringify(r3.missingGeo));
 
-    // pool exhaustion is now the only non-floor unfilled reason
+    // pool exhaustion and missing training are now the only unfilled reasons
     var two = [ mkLead({ 'Customer Name':'A', 'City':'Bowie' }), mkLead({ 'Customer Name':'B', 'City':'Bowie' }) ];
     var r4 = E.run(mkInput(two, [rep('titus smith','bowie')]));
     eq('more leads than reps → one unfilled', r4.counts.unfilled, 1);
@@ -933,6 +938,76 @@ function runAll(E){
     var small = r.rows.filter(function(x){ return x.tier === 'SMALL'; })[0];
     eq('BIG lead got the stronger rep', big.rep.c, 'titus smith');
     eq('SMALL lead got the other one', small.rep.c, 'stephen bryan');
+  })();
+
+  // ---------- 8b. BIG floor override ----------
+  group('BIG floor override — big leads never go unfilled (rule 2026-11-28)');
+  (function(){
+    function weakRep(name, city){
+      var w = rep(name, city);
+      ['Windows','Doors','Siding','Gutters','Roofing'].forEach(function(p){ w.rank[p] = { leads:50, nsli:500, close:5 }; });
+      return w;
+    }
+    var bigLead = mkLead({ 'Customer Name':'Big One', 'Product':'SIDING', 'City':'Bowie' });
+
+    // 1) everyone below the floor → the BEST of them still gets the BIG lead
+    var w1 = weakRep('titus smith','bowie'), w2 = weakRep('stephen bryan','laurel');
+    var inp = mkInput([bigLead], [w1, w2]);
+    inp.d60['titus smith']   = { nsli:900, close:10, issued:50, vol:36000 };
+    inp.d60['stephen bryan'] = { nsli:500, close:5,  issued:50, vol:20000 };
+    inp.global60 = 700;
+    var r = E.run(inp);
+    ok('covered, not unfilled', r.rows[0].rep !== null, JSON.stringify(r.rows[0].flags));
+    eq('the better of the two below-floor reps wins', r.rows[0].rep.c, 'titus smith');
+    eq('nothing counted unfilled', r.counts.unfilled, 0);
+    eq('one floor override counted', r.counts.floorOverride, 1);
+
+    // 2) a rep who CLEARS the floor is still taken first — the override is a last
+    // resort, even when the below-floor rep would out-score them with the floor off
+    var nearMiss = rep('titus smith','bowie');
+    nearMiss.rank.Siding = { leads:50, nsli:5000, close:20 };           // eff ≈ $4,812 — just under
+    var clears = rep('james archy','bowie');
+    clears.rank.Siding = { leads:30, nsli:5500, close:30 };             // eff ≈ $5,818 — just over
+    var inp2 = mkInput([bigLead], [nearMiss, clears]);
+    inp2.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:800000 };  // huge volume boost
+    var r2 = E.run(inp2);
+    eq('above-floor rep wins even against a higher no-floor score', r2.rows[0].rep.c, 'james archy');
+    ok('clean assignment carries no override flag',
+      !r2.rows[0].flags.some(function(f){ return /FLOOR OVERRIDE/.test(f); }), JSON.stringify(r2.rows[0].flags));
+    eq('no override counted', r2.counts.floorOverride, 0);
+
+    // 3) big leads get covered OVER smaller ones: one below-floor rep, a BIG and a
+    // SMALL lead — the rescue runs before the smaller tiers, so BIG takes the rep
+    var smallLead = mkLead({ 'Customer Name':'Small One', 'Product':'WINDOWS', 'Notes':'3 windows', 'City':'Bowie' });
+    var r3 = E.run(mkInput([smallLead, bigLead], [weakRep('titus smith','bowie')]));
+    var bigRow = r3.rows.filter(function(x){ return x.tier === 'BIG'; })[0];
+    var smallRow = r3.rows.filter(function(x){ return x.tier === 'SMALL'; })[0];
+    ok('the BIG lead got the only rep (via override)',
+      bigRow.rep !== null && /FLOOR OVERRIDE/.test(bigRow.flags[0]), JSON.stringify(bigRow.flags));
+    ok('the SMALL lead is the one left uncovered',
+      smallRow.rep === null && /more leads than available reps/.test(smallRow.flags[0]), JSON.stringify(smallRow.flags));
+
+    // 4) training still gates the rescue — an untrained rep never gets the lead,
+    // floor or no floor
+    var r4 = E.run(mkInput([bigLead], [weakRep('titus smith','bowie')],
+      { training:{ 'titus smith':'W/D/G' } }));                          // no Siding
+    eq('untrained rep is never a rescue', r4.rows[0].rep, null);
+    ok('unfilled reason is training, not the floor',
+      /nobody on this roster is trained for Siding/.test(r4.rows[0].flags[0]), r4.rows[0].flags[0]);
+    eq('no override counted when nothing was rescued', r4.counts.floorOverride, 0);
+
+    // 5) ALL-markets run carries the override through the merge and counts
+    var wAll = weakRep('titus smith','bowie|md');
+    var rAll = E.runAllMarkets({
+      slot:'AM', leads:[mkLead({ 'Customer Name':'Big One', 'Product':'SIDING', 'City':'Bowie', 'Market':'DC Metro' })],
+      rosters:{ 'DC Metro':['titus smith'], 'Hampton Roads':[], 'Richmond':[] }, bathRoster:[],
+      rank:{ 'titus smith':wAll.rank }, d60:{ 'titus smith':{ nsli:500, close:5, issued:50, vol:25000 } },
+      global60:500, homes:{ 'titus smith':wAll.home }, origins:{},
+      geo:null, aliases:null, prodMap:null, manualPins:{}
+    });
+    ok('ALL: covered via override', rAll.rows[0].rep !== null && /FLOOR OVERRIDE/.test(rAll.rows[0].flags[0]),
+      JSON.stringify(rAll.rows[0].flags));
+    eq('ALL: counts.floorOverride merged', rAll.counts.floorOverride, 1);
   })();
 
   // ---------- 9. excluded reps ----------
@@ -1337,7 +1412,8 @@ function runAll(E){
     ok('Frederick (~109m) assigns', rDefault.rows[0].rep !== null);
     var rTight = E.run(mkInput(leads, [titus], { ceil:60 }));
     ok('a legacy ceil input is ignored — still assigns', rTight.rows[0].rep !== null);
-    // Floor: give a weak rep a BIG (siding) lead — with the default floor it's unfilled.
+    // Floor: give a weak rep a BIG (siding) lead — at the default floor nobody
+    // clears it, so it lifts as an override; at $0 the same rep assigns cleanly.
     var weak = rep('titus smith','bowie|md'); weak.rank.team = 'Beta';
     ['Windows','Doors','Siding','Gutters','Roofing','Bath'].forEach(function(p){ weak.rank[p] = { leads:50, nsli:500, close:5 }; });
     var big = mkLead({ 'Product':'SIDING', 'City':'Bowie' });
@@ -1345,9 +1421,12 @@ function runAll(E){
     inpF.d60['titus smith'] = { nsli:500, close:5, issued:50, vol:25000 };
     inpF.global60 = 500;
     var rHi = E.run(Object.assign({}, inpF, { floor:5000 }));
-    eq('BIG unfilled at $5,000 floor', rHi.rows[0].rep, null);
+    ok('BIG at $5,000 floor → covered via FLOOR OVERRIDE',
+      rHi.rows[0].rep !== null && /FLOOR OVERRIDE/.test(rHi.rows[0].flags[0]), JSON.stringify(rHi.rows[0].flags));
     var rLo = E.run(Object.assign({}, inpF, { floor:0 }));
-    ok('BIG assigns once the floor is dropped to $0', rLo.rows[0].rep !== null);
+    ok('BIG assigns cleanly (no override flag) once the floor is dropped to $0',
+      rLo.rows[0].rep !== null && !rLo.rows[0].flags.some(function(f){ return /FLOOR OVERRIDE/.test(f); }),
+      JSON.stringify(rLo.rows[0].flags));
   })();
 
   group('DC parity (byte-identical for non-bath-combo leads)');

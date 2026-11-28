@@ -1308,12 +1308,13 @@ function run(input){
   var fieldOpenIdx = Object.keys(L).map(Number).filter(function(i){ return !L[i].isBathLead && !pins[i]; });
   var res = {};
   var live = fieldPool.slice();
-  ['BIG','MEDIUM','SMALL'].forEach(function(T){
-    var tierLeads = fieldOpenIdx.filter(function(i){ return L[i].tier === T; });
-    if(!tierLeads.length) return;
-    if(!live.length){ tierLeads.forEach(function(i){ res[i] = null; }); return; }
+  // One Hungarian pass over `live` for the given leads. applyFloor gates BIG-floor
+  // eligibility; isRescue marks assignments made with the floor lifted. A lead that
+  // stays unmatched keeps res[i] === undefined so a later pass can still fill it.
+  function assignPass(leadIdxs, applyFloor, isRescue){
+    if(!live.length) return;
     var M = [], DR = [];
-    tierLeads.forEach(function(i, a){
+    leadIdxs.forEach(function(i, a){
       M[a] = []; DR[a] = [];
       live.forEach(function(rep, b){
         var dm = driveTo(rep.origin, L[i].city, L[i].stateAbbr);
@@ -1323,32 +1324,46 @@ function run(input){
         // Manager rule (2026-07-17): drive time never blocks an assignment.
         // It stays a scoring penalty (closer reps preferred); unknown drive = no penalty, flagged.
         var bv = S.baseVal(rep.c, L[i].comps);
-        if(T === 'BIG' && bv < floor){ M[a][b] = -1e9; return; }
+        if(applyFloor && bv < floor){ M[a][b] = -1e9; return; }
         M[a][b] = bv + CONST.VOL_ADD*S.volnorm(rep.c) - CONST.DRIVE_PEN*(dm === null ? 0 : dm) + S.tiebreak(rep.c);
       });
     });
     var rowToCol = hungarianMax(M);
     var used = [];
-    tierLeads.forEach(function(i, a){
+    leadIdxs.forEach(function(i, a){
       var b = rowToCol[a];
       if(b >= 0 && M[a][b] > -1e8){
         var rep = live[b];
-        res[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, L[i].comps) };
+        res[i] = { rep:rep, drive:DR[a][b], eff:S.baseVal(rep.c, L[i].comps), floorOverride: !!isRescue };
         used.push(rep.c);
-      } else res[i] = null;
+      }
     });
     live = live.filter(function(r){ return used.indexOf(r.c) < 0; });
+  }
+  ['BIG','MEDIUM','SMALL'].forEach(function(T){
+    var tierLeads = fieldOpenIdx.filter(function(i){ return L[i].tier === T; });
+    if(!tierLeads.length) return;
+    assignPass(tierLeads, T === 'BIG', false);
+    if(T === 'BIG'){
+      // Manager rule (2026-11-28): a BIG lead never goes unfilled over the floor.
+      // Reps that clear the floor are still taken first (the pass above); only when
+      // none is free does the floor lift, handing the lead to the next best trained
+      // rep. The rescue runs BEFORE the MEDIUM/SMALL tiers, so on a thin roster the
+      // big lead is covered ahead of the smaller ones. (Deliberate divergence from
+      // lead_engine.py, which leaves such leads unfilled.)
+      var openBig = tierLeads.filter(function(i){ return !res[i]; });
+      if(openBig.length) assignPass(openBig, false, true);
+    }
+    tierLeads.forEach(function(i){ if(res[i] === undefined) res[i] = null; });
   });
   // `live` is now the field bench (unassigned field reps), available for bath overflow.
 
-  // Drive no longer limits feasibility — only training and the BIG floor can.
-  function feasibleField(i, applyFloor){
+  // Drive never limits feasibility, and the BIG floor lifts rather than blocks
+  // (rule 2026-11-28) — only training can make a lead infeasible for a roster.
+  function feasibleField(i){
     var d = L[i];
-    return fieldAvail.filter(function(a){
-      if(trainMiss(a.c, d.comps).length) return false;
-      if(applyFloor && S.baseVal(a.c, d.comps) < floor) return false;
-      return true;
-    }).map(function(a){ return a.disp; });
+    return fieldAvail.filter(function(a){ return !trainMiss(a.c, d.comps).length; })
+      .map(function(a){ return a.disp; });
   }
 
   // ================== BATH BOARD ==================
@@ -1437,13 +1452,18 @@ function run(input){
       row.drive = r.drive === null ? null : Math.round(r.drive);
       row.eff = Math.round(r.eff); row.flags = fr.flags;
       row.state = (r.drive === null || r.drive > 75 || fr.thin) ? 'warn' : (d.tier === 'BIG' ? 'big' : '');
+      if(r.floorOverride){
+        // rescue assignment (rule 2026-11-28) — say so first and highlight the row
+        row.floorOverride = true;
+        row.flags.unshift('FLOOR OVERRIDE — nobody free clears the $' + floor.toLocaleString('en-US') +
+          ' BIG floor; next best trained rep assigned (big leads always get covered)');
+        row.state = 'warn';
+      }
     } else {
-      // Drive never blocks anymore — a lead goes unfilled only when the rep pool
-      // runs out, (BIG tier) everyone is under the floor, or nobody is trained for it.
-      if(fieldAvail.length && !feasibleField(i, false).length)
+      // Drive never blocks, and the BIG floor lifts rather than blocks — a lead goes
+      // unfilled only when nobody is trained for it or the rep pool runs out.
+      if(fieldAvail.length && !feasibleField(i).length)
         row.flags = ['UNFILLED — nobody on this roster is trained for ' + d.comps.join('/')];
-      else if(d.tier === 'BIG' && !feasibleField(i, true).length && fieldAvail.length)
-        row.flags = ['UNFILLED — all reps below $' + floor.toLocaleString('en-US') + ' BIG floor'];
       else
         row.flags = ['UNCOVERED — more leads than available reps (all taken)'];
       row.state = 'bad';
@@ -1557,6 +1577,7 @@ function run(input){
     counts: {
       assigned: rows.filter(function(r){ return r.rep; }).length,
       unfilled: rows.filter(function(r){ return !r.rep; }).length,
+      floorOverride: rows.filter(function(r){ return r.floorOverride; }).length,
       pinned: Object.keys(pins).length,
       skipped: Object.keys(dropped).length,
       bench: bench.length,
@@ -1662,6 +1683,7 @@ function runAllMarkets(input){
     counts: {
       assigned: rows.filter(function(r){ return r.rep; }).length,
       unfilled: rows.filter(function(r){ return !r.rep; }).length,
+      floorOverride: rows.filter(function(r){ return r.floorOverride; }).length,
       pinned: Object.keys(pins).length,
       skipped: Object.keys(dropped).length,
       bench: bench.length,
@@ -2846,6 +2868,7 @@ function renderResult(r){
   function stat(n, label){ s.appendChild(el('div', { class:'stat' }, [ el('b',{text:String(n)}), el('span',{text:label}) ])); }
   stat(r.counts.assigned, 'assigned');
   stat(r.counts.unfilled, 'unfilled');
+  if(r.counts.floorOverride) stat(r.counts.floorOverride, 'floor override');
   stat(r.counts.pinned, 'pinned');
   stat(r.counts.skipped, 'skipped');
   stat(r.counts.bench, 'bench');
@@ -2889,6 +2912,10 @@ function renderResult(r){
     longDrives.map(function(x){ return x.rep.disp + ' → ' + x.lead['City'] + ' (' + x.drive + 'm from ' + x.origin + ')'; }));
   var unf = r.rows.concat(r.bathRows).filter(function(x){ return !x.rep; });
   if(unf.length) notice('bad', 'Unfilled leads:', unf.map(function(x){ return (x.lead['Customer Name']||'?') + ' — ' + x.flags[0]; }));
+  var fOv = r.rows.filter(function(x){ return x.floorOverride; });
+  if(fOv.length) notice('warn', 'BIG floor overridden — nobody free cleared it, so the big lead went to the next best trained rep:',
+    fOv.map(function(x){ return x.rep.disp + ' → ' + (x.lead['Customer Name']||'?') + ' (' + (x.lead['City']||'') + ')' +
+      (x.eff === null ? '' : ' — eff $' + x.eff.toLocaleString('en-US')); }));
   var namePins = r.rows.concat(r.bathRows).filter(function(x){
     return x.pinned && /appears in the notes/.test(x.flags[0]);
   });
@@ -3501,7 +3528,7 @@ $('#btnCaps').addEventListener('click', function(){
     el('button', { class:'sm', text:'Close', onclick:function(){ host.innerHTML=''; } })
   ]));
   body.appendChild(el('p', { class:'muted', style:'margin:0;font-size:12px',
-    text:'BIG floor is the minimum Eff. NSLI a rep needs to be eligible for a BIG lead. Default $5,000. Leave empty to use the default. (Drive time no longer limits assignments — it only nudges the scoring toward closer reps.)' }));
+    text:'BIG floor is the minimum Eff. NSLI a rep needs to be eligible for a BIG lead. Default $5,000. Leave empty to use the default. If nobody free clears the floor, it lifts automatically: the BIG lead goes to the next best trained rep (flagged "FLOOR OVERRIDE") instead of going unfilled — big leads always get covered. (Drive time no longer limits assignments — it only nudges the scoring toward closer reps.)' }));
   E.MARKETS.forEach(function(m){
     var floorIn = el('input', { type:'number', min:'0', step:'250',
       value: store.floor[m] != null ? String(store.floor[m]) : '', placeholder:String(E.DEFAULT_FLOOR[m]||5000) });
